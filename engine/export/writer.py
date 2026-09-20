@@ -90,7 +90,13 @@ def to_pattern(plan: StitchPlan, limits: FormatLimits) -> pyembroidery.EmbPatter
             }
         )
 
-    for stitch in split_long_moves(plan.stitches, limits.max_move_mm):
+    # Split against a budget one machine unit under the format's limit. A move
+    # split to exactly the limit can quantize upward -- two endpoints rounding
+    # in opposite directions turn 12.1 mm into 12.2 mm, which the controller
+    # rejects. The margin costs one extra jump on a long travel and removes a
+    # failure that only shows up on some geometry.
+    budget_mm = limits.max_move_mm - limits.unit_mm
+    for stitch in split_long_moves(plan.stitches, budget_mm):
         pattern.add_stitch_absolute(
             _COMMAND[stitch.cmd],
             mm_to_units(stitch.x_mm, limits.unit_mm),

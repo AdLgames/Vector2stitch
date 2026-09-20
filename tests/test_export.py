@@ -179,3 +179,22 @@ def test_a_caller_can_still_ask_for_a_real_date(tmp_path, single_run_design):
     plan = generate(single_run_design)
     data = write(plan, tmp_path / "design.jef", created="20260101120000").read_bytes()
     assert b"20260101120000" in data
+
+
+@pytest.mark.parametrize("extension", FORMAT_NAMES)
+def test_a_travel_that_splits_exactly_onto_the_limit_stays_legal(tmp_path, extension):
+    """Two endpoints rounding in opposite directions can push a move split to
+    exactly the limit one unit over it. Caught in a cap calibration pattern,
+    where a 24.2 mm travel became two 12.1 mm jumps and one wrote as 12.2 mm."""
+    limits = limits_for(extension)
+    span = limits.max_move_mm * 2
+    doc = design(
+        [
+            run_object("obj_001", [(0.0, 0.0), (5.0, 0.0)]),
+            run_object("obj_002", [(0.05, span + 0.05), (5.0, span)], z_order=1),
+        ]
+    )
+    plan = generate(doc)
+    report = verify(plan, write(plan, tmp_path / f"design.{extension}"))
+    assert report.ok, report.problems
+    assert report.max_move_mm <= limits.max_move_mm

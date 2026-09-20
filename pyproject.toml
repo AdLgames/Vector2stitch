@@ -19,9 +19,10 @@ dev = ["pytest>=8.0", "ruff>=0.5"]
 
 [project.scripts]
 v2s = "engine.cli.main:main"
+v2s-lab = "lab.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["engine*"]
+include = ["engine*", "lab*"]
 
 [tool.setuptools.package-data]
 "engine.profiles" = ["data/*.yaml"]

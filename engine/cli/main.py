@@ -7,12 +7,14 @@ The service calls the same library functions, never this module.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from engine.cli.worksheet import worksheet
 from engine.export import verify, write
-from engine.ir.schema import load_ir
+from engine.ir.schema import load_ir, save_ir
+from engine.lab import PATTERNS, PatternNotAvailable, build_pattern, measurement_sheet
 from engine.machines import MachineNotFound, available_machines, load_machine, resolve_setup
 from engine.profiles.loader import ProfileNotFound, available_profiles, load_profile
 from engine.simulate import render_file
@@ -130,12 +132,88 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_calibrate(args: argparse.Namespace) -> int:
-    print(
-        "calibrate: the calibration pattern generator lands in M1 "
-        "(pull-comp targets, column ladders, text ladders, registration marks).",
-        file=sys.stderr,
-    )
-    return EXIT_NOT_YET_BUILT
+    """Generate the calibration set: files to sew, and sheets to measure on."""
+    if args.list:
+        for name, pattern in PATTERNS.items():
+            state = "ready" if pattern.available else f"needs {pattern.requires}"
+            print(f"{name:<22} {state:<12} {pattern.purpose}")
+        return EXIT_OK
+
+    try:
+        profile = load_profile(args.profile)
+    except ProfileNotFound as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    machine = None
+    if args.machine:
+        try:
+            machine = load_machine(args.machine, args.machine_dir)
+        except MachineNotFound as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+    wanted = args.patterns or [name for name, p in PATTERNS.items() if p.available]
+    out_dir = Path(args.out) / profile.ref.replace("@", "_at_")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    skipped = 0
+    for name in wanted:
+        try:
+            doc, targets = build_pattern(name, profile.ref)
+        except PatternNotAvailable as exc:
+            print(f"skipped: {exc}", file=sys.stderr)
+            skipped += 1
+            continue
+        except KeyError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+        plan = generate(doc, profile)
+        setup = resolve_setup(profile, doc, plan, machine, args.formats)
+        if not setup.ok:
+            for blocker in setup.blockers:
+                print(f"skipped {name}: {blocker}", file=sys.stderr)
+            skipped += 1
+            continue
+
+        save_ir(doc, out_dir / f"{name}.ir.json")
+        for fmt in args.formats:
+            path = write(plan, out_dir / f"{name}.{fmt}")
+            report = verify(plan, path)
+            if not report.ok:
+                print(f"error: {report.summary()}", file=sys.stderr)
+                return EXIT_ERROR
+
+        (out_dir / f"{name}.worksheet.txt").write_text(
+            worksheet(doc, plan, profile, setup), encoding="utf-8"
+        )
+        (out_dir / f"{name}.measure.txt").write_text(
+            measurement_sheet(name, doc, profile, setup, targets), encoding="utf-8"
+        )
+        (out_dir / f"{name}.targets.json").write_text(
+            json.dumps(
+                {
+                    "pattern": name,
+                    "fabric_profile": profile.ref,
+                    "engine_version": doc.engine_version,
+                    "targets": [target.model_dump(mode="json") for target in targets],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"{name}: {plan.stitch_count()} stitches, {len(targets)} targets to measure")
+        written += 1
+
+    print(f"\n{written} pattern(s) in {out_dir}")
+    if skipped:
+        print(f"{skipped} pattern(s) skipped -- see above", file=sys.stderr)
+    print("Nothing here is calibration until it has been sewn and measured.")
+    return EXIT_OK
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,8 +270,28 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("file", nargs="?", help="path to a machine file or IR document")
     check.set_defaults(func=_cmd_check)
 
-    calibrate = sub.add_parser("calibrate", help="generate lab calibration patterns (M1)")
-    calibrate.add_argument("--out", default="out", help="output directory")
+    calibrate = sub.add_parser("calibrate", help="generate lab calibration patterns")
+    calibrate.add_argument("--out", default="out/calibration", help="output directory")
+    calibrate.add_argument(
+        "--profile", default="twill", help="fabric profile to calibrate (default: twill)"
+    )
+    calibrate.add_argument(
+        "--patterns",
+        default=None,
+        type=lambda value: [part.strip() for part in value.split(",") if part.strip()],
+        help="comma-separated pattern names (default: every available pattern)",
+    )
+    calibrate.add_argument(
+        "--formats",
+        default=",".join(DEFAULT_FORMATS),
+        type=lambda value: [part.strip().lower() for part in value.split(",") if part.strip()],
+        help=f"comma-separated output formats (default: {','.join(DEFAULT_FORMATS)})",
+    )
+    calibrate.add_argument("--machine", default=None, help="machine profile reference")
+    calibrate.add_argument("--machine-dir", default=None, help="your machine profile directory")
+    calibrate.add_argument(
+        "--list", action="store_true", help="list patterns and what each is for"
+    )
     calibrate.set_defaults(func=_cmd_calibrate)
 
     return parser

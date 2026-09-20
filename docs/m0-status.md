@@ -30,11 +30,13 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Basic simulator (SVG from the machine file) | `engine/simulate/` | Done |
 | Production worksheet | `engine/cli/worksheet.py` | Done (text; PDF/HTML at M7) |
 | CLI: `digitize`, `render`, `profiles` | `engine/cli/main.py` | Done |
-| CLI: `check`, `calibrate` | `engine/cli/main.py` | Stubs, exit 3 |
+| CLI: `check` | `engine/cli/main.py` | Stub, exit 3 |
+| Calibration patterns + measurement sheets | `engine/lab/` | 5 of 8 build; 3 need M1/M6 |
+| Sew-out log, defect taxonomy, `v2s-lab` | `lab/` | Done |
 | Determinism tests + committed fingerprints | `tests/test_determinism.py` | Done |
 | CI: lint, tests on 3.11/3.12, determinism on two OS images | `.github/workflows/ci.yml` | Done |
 
-171 tests pass; `ruff check` is clean.
+234 tests pass; `ruff check` is clean.
 
 ## Try it
 
@@ -53,6 +55,10 @@ writes the operator worksheet beside them.
 - **Only run objects.** Satin and fill raise `UnsupportedObject` naming M1;
   text names M6. This is the refusal rule, not an oversight.
 - **No ingest.** The IR is hand-authored. SVG/PDF in is M3.
+- **No satin, fill or text calibration.** Three of the eight calibration
+  patterns need generators that do not exist, so the most consequential
+  parameters in every profile -- satin spacing, fill spacing, underlay -- cannot
+  be calibrated yet. They are declared, not hidden.
 - **No checks.** `v2s check` exits 3. Every file goes through human review
   until M2, without exception.
 - **No sequencing.** Objects sew in `sequence`, or by z-order then id. Travel

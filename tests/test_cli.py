@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from engine.cli.main import EXIT_ERROR, EXIT_NOT_YET_BUILT, EXIT_OK, main
 from engine.ir.schema import (
     Design,
@@ -122,14 +120,78 @@ def test_profiles_lists_what_v1_supports(capsys):
     assert "twill@1" in out and "pique@1" in out and "cap@1" in out
 
 
-@pytest.mark.parametrize(
-    ("argv", "needle"),
-    [(["check"], "M2"), (["calibrate"], "M1")],
-)
-def test_unbuilt_commands_say_so_distinctly(capsys, argv, needle):
+def test_unbuilt_commands_say_so_distinctly(capsys):
     """Exit 3 is "not built yet", not "broken": scripts can tell them apart."""
-    assert main(argv) == EXIT_NOT_YET_BUILT
-    assert needle in capsys.readouterr().err
+    assert main(["check"]) == EXIT_NOT_YET_BUILT
+    assert "M2" in capsys.readouterr().err
+
+
+def test_calibrate_lists_what_is_ready_and_what_is_waiting(capsys):
+    assert main(["calibrate", "--list"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "dimension_grid" in out and "ready" in out
+    assert "column_ladder" in out and "needs M1" in out
+
+
+def test_calibrate_writes_files_to_sew_and_a_sheet_to_measure_on(tmp_path, capsys):
+    code = main(
+        [
+            "calibrate",
+            "--profile",
+            "twill@1",
+            "--out",
+            str(tmp_path),
+            "--patterns",
+            "dimension_grid",
+            "--formats",
+            "dst",
+        ]
+    )
+    assert code == EXIT_OK
+    out_dir = tmp_path / "twill_at_1"
+    for suffix in (".ir.json", ".dst", ".worksheet.txt", ".measure.txt", ".targets.json"):
+        assert (out_dir / f"dimension_grid{suffix}").exists()
+    sheet = (out_dir / "dimension_grid.measure.txt").read_text()
+    assert "square_01_x" in sheet and "designed" in sheet
+    assert "Stabilizer" in sheet
+    assert "is calibration until it has been sewn" in capsys.readouterr().out
+
+
+def test_calibrate_skips_a_pattern_that_needs_generators_we_lack(tmp_path, capsys):
+    code = main(
+        [
+            "calibrate",
+            "--profile",
+            "twill@1",
+            "--out",
+            str(tmp_path),
+            "--patterns",
+            "column_ladder",
+        ]
+    )
+    assert code == EXIT_OK
+    assert "needs generators that land in M1" in capsys.readouterr().err
+
+
+def test_cap_calibration_fits_the_cap_field(tmp_path, capsys):
+    """A cap front is about 70 mm tall. A pattern that cannot be hooped
+    measures nothing, so the cap set is built to fit it."""
+    code = main(
+        [
+            "calibrate",
+            "--profile",
+            "cap@1",
+            "--out",
+            str(tmp_path),
+            "--machine",
+            "multineedle_6head@1",
+            "--formats",
+            "dst",
+        ]
+    )
+    assert code == EXIT_OK
+    assert "skipped" not in capsys.readouterr().err
+    assert (tmp_path / "cap_at_1" / "dimension_grid.dst").exists()
 
 
 def test_worksheet_carries_the_machine_setup(tmp_path):
