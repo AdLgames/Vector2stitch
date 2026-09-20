@@ -30,6 +30,7 @@ from engine.ir.schema import (
     ParamSource,
     Placement,
     PolylineShape,
+    RailsShape,
     Thread,
 )
 from engine.lab.targets import Axis, MeasurementTarget
@@ -79,7 +80,13 @@ def _document(profile_ref: str, objects: list[EmbroideryObject]) -> IRDocument:
     so a pattern can never claim dimensions it does not have -- which would
     quietly defeat the sew-field check it is about to go through.
     """
-    points = [point for obj in objects for point in obj.shape.points]
+    points = [
+        point
+        for obj in objects
+        for point in (
+            _column_outline(obj) if obj.kind is ObjectKind.SATIN else obj.shape.points
+        )
+    ]
     min_x = min(x for x, _ in points)
     max_x = max(x for x, _ in points)
     min_y = min(y for _, y in points)
@@ -342,6 +349,82 @@ def corner_set(profile_ref: str) -> tuple[IRDocument, list[MeasurementTarget]]:
     return _document(profile_ref, objects), targets
 
 
+def _satin(
+    object_id: str,
+    left: list[tuple[float, float]],
+    right: list[tuple[float, float]],
+    *,
+    thread: Thread = BLACK,
+    z_order: int = 0,
+) -> EmbroideryObject:
+    return EmbroideryObject(
+        id=object_id,
+        kind=ObjectKind.SATIN,
+        shape=RailsShape(rails=(left, right)),
+        thread=thread,
+        z_order=z_order,
+    )
+
+
+def column_ladder(profile_ref: str) -> tuple[IRDocument, list[MeasurementTarget]]:
+    """Satin columns from 1 mm to 8 mm wide.
+
+    The single most informative pattern in the set, because column width
+    decides four things at once: whether pull compensation is right (measure
+    the sewn width against the designed one), whether the underlay recipe
+    switches at the right widths, where the column has to start splitting, and
+    whether the edges are clean enough to sell.
+
+    The 8 mm column is past the profile's maximum on purpose: it is there to
+    show what the split looks like, not to pass.
+    """
+    profile = load_profile(profile_ref)
+    cap = _is_cap(profile_ref)
+    widths = (1.0, 2.0, 3.0, 4.0, 6.0, 8.0)
+    length = 30.0 if cap else 45.0
+
+    objects: list[EmbroideryObject] = []
+    targets: list[MeasurementTarget] = []
+    y = 5.0
+    for index, width in enumerate(widths, start=1):
+        left = [(5.0, y), (5.0 + length, y)]
+        right = [(5.0, y + width), (5.0 + length, y + width)]
+        objects.append(_satin(f"column_{index:02d}", left, right, z_order=index))
+        recipe = "+".join(profile.underlay.for_satin(width))
+        over = " (past the profile maximum: expect a split)" if (
+            width > profile.classification.satin_max_width_mm
+        ) else ""
+        targets.append(
+            MeasurementTarget(
+                id=f"column_{index:02d}_width",
+                description=(
+                    f"{width:.0f} mm satin column, measured across. "
+                    f"Underlay: {recipe or 'none'}{over}"
+                ),
+                designed_mm=width,
+                axis=Axis.Y,
+                tolerance_mm=0.3,
+            )
+        )
+        targets.append(
+            MeasurementTarget(
+                id=f"column_{index:02d}_length",
+                description=f"{width:.0f} mm column, measured along -- push at the ends",
+                designed_mm=length,
+                axis=Axis.X,
+            )
+        )
+        y += width + 6.0
+
+    return _document(profile_ref, objects), targets
+
+
+def _column_outline(obj: EmbroideryObject) -> list[tuple[float, float]]:
+    """A satin object's rails, for the bounding box in _document."""
+    left, right = obj.shape.rails
+    return list(left) + list(right)
+
+
 PATTERNS: dict[str, CalibrationPattern] = {
     pattern.name: pattern
     for pattern in (
@@ -373,8 +456,7 @@ PATTERNS: dict[str, CalibrationPattern] = {
         CalibrationPattern(
             name="column_ladder",
             purpose="Satin column widths from 1 to 8 mm: split point, edge quality, underlay",
-            build=None,
-            requires="M1",
+            build=column_ladder,
         ),
         CalibrationPattern(
             name="density_wedge",

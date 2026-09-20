@@ -23,12 +23,23 @@ def test_every_available_pattern_generates_a_sewable_plan(name):
 @pytest.mark.parametrize("name", AVAILABLE)
 def test_declared_size_matches_the_geometry(name):
     """A pattern that overstated its size would defeat the sew-field check it
-    is about to go through."""
-    doc, _ = build_pattern(name, "twill@1")
-    plan = generate(doc, load_profile("twill@1"))
+    is about to go through.
+
+    Declared size is the drawn size -- what was asked for. The sewn extents
+    can exceed it by the pull compensation, because compensation deliberately
+    stitches wider than drawn so the fabric draws back to size. They can never
+    fall short of it.
+    """
+    profile = load_profile("twill@1")
+    doc, _ = build_pattern(name, profile.ref)
+    plan = generate(doc, profile)
     min_x, min_y, max_x, max_y = plan.extents_mm()
-    assert doc.design.width_mm == pytest.approx(max_x - min_x, abs=0.01)
-    assert doc.design.height_mm == pytest.approx(max_y - min_y, abs=0.01)
+    slack = 2 * profile.compensation.pull_comp_mm_per_side + 0.01
+
+    assert doc.design.width_mm <= max_x - min_x + 0.01
+    assert doc.design.height_mm <= max_y - min_y + 0.01
+    assert doc.design.width_mm >= max_x - min_x - slack
+    assert doc.design.height_mm >= max_y - min_y - slack
 
 
 @pytest.mark.parametrize("name", AVAILABLE)
@@ -65,6 +76,36 @@ def test_every_pattern_fits_a_commercial_sew_field(name):
     assert setup.ok, setup.blockers
 
 
+def test_the_column_ladder_covers_every_underlay_band():
+    """Column width decides the underlay recipe. A ladder that stayed inside
+    one band would never test the switch."""
+    profile = load_profile("twill@1")
+    doc, _ = build_pattern("column_ladder", profile.ref)
+    recipes = set()
+    for obj in doc.objects:
+        left, right = obj.shape.rails
+        width = abs(right[0][1] - left[0][1])
+        recipes.add(tuple(profile.underlay.for_satin(width)))
+    assert len(recipes) == 3
+
+
+def test_the_column_ladder_goes_past_the_split_point_on_purpose():
+    """The widest column is there to show what a split looks like."""
+    profile = load_profile("twill@1")
+    doc, targets = build_pattern("column_ladder", profile.ref)
+    widths = [t.designed_mm for t in targets if t.id.endswith("_width")]
+    assert max(widths) > profile.classification.satin_max_width_mm
+    assert any("expect a split" in t.description for t in targets)
+
+
+def test_the_column_ladder_measures_along_as_well_as_across():
+    """Across reads pull; along reads push at the ends. One number would hide
+    which of the two is wrong."""
+    _, targets = build_pattern("column_ladder", "twill@1")
+    axes = {t.axis for t in targets}
+    assert axes == {Axis.X, Axis.Y}
+
+
 def test_dimension_grid_measures_both_axes_separately():
     """Pull draws in along the stitch direction and pushes out at the ends, so
     one number for a square would hide which one is wrong."""
@@ -87,9 +128,9 @@ def test_stitch_length_ladder_actually_varies_stitch_length():
 
 
 def test_patterns_that_need_generators_we_lack_are_declared_not_hidden():
-    """Half the set is waiting on satin, fill and text. Omitting them would
-    hide exactly the gap the lab exists to close."""
-    assert PENDING == ["column_ladder", "density_wedge", "text_ladder"]
+    """What is left is waiting on fill and text. Omitting them would hide
+    exactly the gap the lab exists to close."""
+    assert PENDING == ["density_wedge", "text_ladder"]
     for name in PENDING:
         assert PATTERNS[name].requires in {"M1", "M6"}
         assert PATTERNS[name].purpose
@@ -113,3 +154,24 @@ def test_patterns_build_for_every_shipped_profile(profile_ref):
     doc, _ = build_pattern("dimension_grid", profile_ref)
     assert doc.design.fabric_profile == profile_ref
     assert generate(doc, load_profile(profile_ref)).stitch_count() > 0
+
+
+@pytest.mark.parametrize("profile_ref", ["twill@1", "pique@1", "cap@1"])
+def test_no_calibration_pattern_sews_an_illegal_stitch(profile_ref):
+    """A calibration pattern that breaks thread teaches nothing about the
+    fabric -- it teaches that the pattern was wrong."""
+    from engine.plan import Cmd
+    from engine.stitchgen.geometry import distance
+
+    profile = load_profile(profile_ref)
+    for name in AVAILABLE:
+        doc, _ = build_pattern(name, profile.ref)
+        plan = generate(doc, profile)
+        lengths = [
+            distance((a.x_mm, a.y_mm), (b.x_mm, b.y_mm))
+            for a, b in zip(plan.stitches, plan.stitches[1:], strict=False)
+            if a.cmd is Cmd.STITCH and b.cmd is Cmd.STITCH
+        ]
+        shortest = min(length for length in lengths if length > 0)
+        assert max(lengths) <= profile.stitch.max_length_mm, name
+        assert shortest >= profile.stitch.min_length_mm * 0.99, name

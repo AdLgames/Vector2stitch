@@ -1,4 +1,4 @@
-# M0 status: Foundations
+# Milestone status: M0 done in software, M1 started
 
 **Build plan reference:** milestone M0 -- IR schema v1, profile loader, CLI
 skeleton, pyembroidery wrapper with round-trip tests, basic simulator.
@@ -23,6 +23,8 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Machine profiles: the shop's own hardware, designer-edited | `engine/machines/` | Done; templates only, none calibrated |
 | Parameter resolution with provenance | `engine/stitchgen/params.py` | Done |
 | Run stitch generation, ties, short-stitch filter, bean | `engine/stitchgen/run.py` | Done |
+| Satin: zigzag, pull comp, short stitches, auto-split (M1) | `engine/stitchgen/satin.py` | Done |
+| Underlay: center run, edge run, zigzag (M1) | `engine/stitchgen/underlay.py` | Done |
 | Plan assembly: travel, trims, colour changes | `engine/stitchgen/__init__.py` | Done |
 | Machine file writers: DST, PES, JEF, EXP | `engine/export/` | Done |
 | Round-trip verification on every file | `engine/export/roundtrip.py` | Done |
@@ -31,12 +33,12 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Production worksheet | `engine/cli/worksheet.py` | Done (text; PDF/HTML at M7) |
 | CLI: `digitize`, `render`, `profiles` | `engine/cli/main.py` | Done |
 | CLI: `check` | `engine/cli/main.py` | Stub, exit 3 |
-| Calibration patterns + measurement sheets | `engine/lab/` | 5 of 8 build; 3 need M1/M6 |
+| Calibration patterns + measurement sheets | `engine/lab/` | 6 of 8 build; fill and text pending |
 | Sew-out log, defect taxonomy, `v2s-lab` | `lab/` | Done |
 | Determinism tests + committed fingerprints | `tests/test_determinism.py` | Done |
 | CI: lint, tests on 3.11/3.12, determinism on two OS images | `.github/workflows/ci.yml` | Done |
 
-234 tests pass; `ruff check` is clean.
+278 tests pass; `ruff check` is clean.
 
 ## Try it
 
@@ -52,19 +54,24 @@ writes the operator worksheet beside them.
 
 ## What M0 does not do
 
-- **Only run objects.** Satin and fill raise `UnsupportedObject` naming M1;
-  text names M6. This is the refusal rule, not an oversight.
+- **No fill.** Tatami fill raises `UnsupportedObject` naming M1, and text
+  names M6. This is the refusal rule, not an oversight.
+- **Satin takes rails, not outlines.** The IR holds rail pairs and the
+  generator uses them. Deriving rails from an outline is the medial-axis work
+  in M3, so today a satin object has to be authored with its rails.
 - **No ingest.** The IR is hand-authored. SVG/PDF in is M3.
-- **No satin, fill or text calibration.** Three of the eight calibration
-  patterns need generators that do not exist, so the most consequential
-  parameters in every profile -- satin spacing, fill spacing, underlay -- cannot
-  be calibrated yet. They are declared, not hidden.
+- **No fill or text calibration.** Two of the eight calibration patterns need
+  generators that do not exist, so fill spacing cannot be calibrated yet. The
+  column ladder now builds, which means satin spacing, pull compensation and
+  the underlay bands can be.
 - **No checks.** `v2s check` exits 3. Every file goes through human review
   until M2, without exception.
 - **No sequencing.** Objects sew in `sequence`, or by z-order then id. Travel
   is an honest jump or trim; hiding travel under later objects is M4.
-- **No compensation applied.** Pull comp is resolved and carried on the plan,
-  but a run stitch has no width to compensate. It first bites at M1, on satin.
+- **Compensation now bites.** Every satin column is stitched wider than
+  drawn by the profile's per-side value -- measured at exactly +0.35 mm on
+  twill across the whole column ladder. Whether that is the *right* value is
+  what the sew-out decides.
 - **No curve shortening.** A run through a tight corner keeps its target
   length and will visibly cut the corner. M1.
 
@@ -97,6 +104,27 @@ density, underlay and compensation are all sized to what 40 wt covers.
 One conflict is unresolved and cannot be settled by reading: whether our pull
 compensation convention (per side) matches the figures the standard quotes.
 Calipers on the calibration shapes settle it. See §4 of that doc.
+
+## What M1 has added so far
+
+Satin columns generate: an arc-length-paired zigzag with pull compensation
+applied per side along the stitch, short stitches that relieve a crowded inner
+rail on curves, automatic splitting into lanes past the profile's width limit,
+and the three satin underlay recipes the profiles already named.
+
+Building it turned up three bugs that a render would not have shown:
+
+1. **A stitch running along a rail instead of across the column.** The lane
+   emission order was wrong; it would have sewn as a visible line down the
+   edge. The short-stitch filter was quietly dropping the evidence.
+2. **Underlay runs at the fill stitch length.** A satin's `stitch_length_mm`
+   defaults to the fill length, so underlay under a 2 mm column was stepping
+   3.5 mm. Underlay runs are runs, whatever is on top of them.
+3. **Floating stitches that the width limit was supposed to prevent.** The top
+   layer split correctly past 7 mm, but the underlay zigzag spanned the full
+   width, and the edge run crossed the whole column at its turn. Being
+   underneath does not hold a stitch down. Both are now split or separated,
+   and an invariant test covers every satin object on every profile.
 
 ## Decisions taken here, worth knowing about
 

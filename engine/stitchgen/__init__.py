@@ -12,8 +12,11 @@ import math
 from engine.ir.schema import EmbroideryObject, IRDocument, ObjectKind
 from engine.plan import Cmd, PlanStitch, PlanThread, StitchPlan
 from engine.profiles.loader import FabricProfile, load_profile
+from engine.stitchgen.geometry import distance
 from engine.stitchgen.params import ResolvedParams, resolve
 from engine.stitchgen.run import stitch_run, tie_points
+from engine.stitchgen.satin import SatinSpec, rail_pairs, sample_count, stitch_satin
+from engine.stitchgen.underlay import UnderlaySpec, satin_underlay
 
 __all__ = [
     "ResolvedParams",
@@ -45,27 +48,80 @@ class UnsupportedObject(NotImplementedError):
 
 
 _MILESTONE_FOR_KIND = {
-    ObjectKind.SATIN: "M1",
     ObjectKind.FILL: "M1",
     ObjectKind.TEXT: "M6",
 }
 
 
-def _object_points(obj: EmbroideryObject, params: ResolvedParams) -> list[tuple[float, float]]:
-    """Penetrations for one object, in order, before travel and ties."""
-    if obj.kind is not ObjectKind.RUN:
-        milestone = _MILESTONE_FOR_KIND[obj.kind]
-        raise UnsupportedObject(
-            f"object {obj.id!r}: {obj.kind.value} stitching lands in {milestone}; "
-            "this engine build generates run objects only"
-        )
-    return stitch_run(
-        list(obj.shape.points),
-        closed=obj.shape.closed,
-        target_length_mm=params.stitch_length_mm,
+def mean_column_width(obj: EmbroideryObject, samples: int = 16) -> float:
+    """Average width of a satin column, used to pick its underlay recipe."""
+    left, right = obj.shape.rails
+    pairs = rail_pairs(list(left), list(right), samples)
+    return sum(distance(a, b) for a, b in pairs) / len(pairs)
+
+
+def _satin_paths(obj: EmbroideryObject, params: ResolvedParams) -> list[list[tuple[float, float]]]:
+    """Underlay layers first, then the column itself.
+
+    Each layer is its own path: the plan assembler decides how to travel
+    between them, the same way it decides between objects.
+    """
+    left, right = [list(rail) for rail in obj.shape.rails]
+
+    underlay_spec = UnderlaySpec(
+        inset_mm=params.underlay_inset_mm,
+        run_length_mm=params.underlay_run_length_mm,
+        zigzag_spacing_mm=params.underlay_zigzag_spacing_mm,
         min_length_mm=params.min_stitch_length_mm,
-        max_length_mm=params.max_stitch_length_mm,
-        bean_repeats=params.bean_repeats,
+        max_width_mm=params.max_width_mm,
+        split_overlap_mm=params.split_overlap_mm,
+    )
+    underlay_pairs = rail_pairs(
+        left, right, sample_count(left, right, underlay_spec.run_length_mm)
+    )
+    paths = satin_underlay(params.underlay, underlay_pairs, underlay_spec)
+
+    paths.append(
+        stitch_satin(
+            left,
+            right,
+            SatinSpec(
+                spacing_mm=params.density_mm,
+                pull_comp_mm_per_side=params.pull_comp_mm_per_side,
+                max_width_mm=params.max_width_mm,
+                short_stitch=params.short_stitch,
+                short_stitch_min_spacing_mm=params.short_stitch_min_spacing_mm,
+                short_stitch_depth=params.short_stitch_depth,
+                split_overlap_mm=params.split_overlap_mm,
+                min_length_mm=params.min_stitch_length_mm,
+            ),
+        )
+    )
+    return paths
+
+
+def _object_paths(
+    obj: EmbroideryObject, params: ResolvedParams
+) -> list[list[tuple[float, float]]]:
+    """Every path one object sews, in order, before travel and ties."""
+    if obj.kind is ObjectKind.RUN:
+        return [
+            stitch_run(
+                list(obj.shape.points),
+                closed=obj.shape.closed,
+                target_length_mm=params.stitch_length_mm,
+                min_length_mm=params.min_stitch_length_mm,
+                max_length_mm=params.max_stitch_length_mm,
+                bean_repeats=params.bean_repeats,
+            )
+        ]
+    if obj.kind is ObjectKind.SATIN:
+        return _satin_paths(obj, params)
+
+    milestone = _MILESTONE_FOR_KIND[obj.kind]
+    raise UnsupportedObject(
+        f"object {obj.id!r}: {obj.kind.value} stitching lands in {milestone}; "
+        f"this engine build generates run and satin objects"
     )
 
 
@@ -91,9 +147,10 @@ def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPla
     last_point: tuple[float, float] | None = None
 
     for obj in doc.ordered_objects():
-        params = resolve(obj, profile)
-        points = _object_points(obj, params)
-        if not points:
+        width_mm = mean_column_width(obj) if obj.kind is ObjectKind.SATIN else None
+        params = resolve(obj, profile, width_mm)
+        paths = [path for path in _object_paths(obj, params) if len(path) >= 2]
+        if not paths:
             continue
 
         thread_key = f"{obj.thread.chart}:{obj.thread.code}"
@@ -117,38 +174,46 @@ def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPla
             )
             current_thread = thread_key
 
-        start = points[0]
-        if last_point is not None:
-            travel = math.hypot(start[0] - last_point[0], start[1] - last_point[1])
-            if travel > profile.routing.trim_threshold_mm:
-                plan.stitches.append(
-                    PlanStitch(
-                        x_mm=last_point[0], y_mm=last_point[1], cmd=Cmd.TRIM, object_id=obj.id
+        for path_index, points in enumerate(paths):
+            start = points[0]
+            if last_point is not None:
+                travel = math.hypot(start[0] - last_point[0], start[1] - last_point[1])
+                if travel > profile.routing.trim_threshold_mm:
+                    plan.stitches.append(
+                        PlanStitch(
+                            x_mm=last_point[0], y_mm=last_point[1], cmd=Cmd.TRIM, object_id=obj.id
+                        )
                     )
-                )
-            if travel > 0:
+                if travel > 0:
+                    plan.stitches.append(
+                        PlanStitch(x_mm=start[0], y_mm=start[1], cmd=Cmd.JUMP, object_id=obj.id)
+                    )
+
+            # Ties go at the object's start and end, not around every layer:
+            # an underlay layer is covered by what follows it, and tying each
+            # one would leave knots under the top stitches.
+            if path_index == 0:
+                for point in tie_points(
+                    start, points[1], params.tie_length_mm, params.tie_stitches
+                ):
+                    plan.stitches.append(
+                        PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
+                    )
+
+            for point in points:
                 plan.stitches.append(
-                    PlanStitch(x_mm=start[0], y_mm=start[1], cmd=Cmd.JUMP, object_id=obj.id)
+                    PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
                 )
 
-        tie_in = tie_points(start, points[1], params.tie_length_mm, params.tie_stitches)
-        for point in tie_in:
-            plan.stitches.append(
-                PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
-            )
+            if path_index == len(paths) - 1:
+                for point in tie_points(
+                    points[-1], points[-2], params.tie_length_mm, params.tie_stitches
+                ):
+                    plan.stitches.append(
+                        PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
+                    )
 
-        for point in points:
-            plan.stitches.append(
-                PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
-            )
-
-        tie_off = tie_points(points[-1], points[-2], params.tie_length_mm, params.tie_stitches)
-        for point in tie_off:
-            plan.stitches.append(
-                PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
-            )
-
-        last_point = points[-1]
+            last_point = points[-1]
 
     if last_point is not None:
         plan.stitches.append(PlanStitch(x_mm=last_point[0], y_mm=last_point[1], cmd=Cmd.END))

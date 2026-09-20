@@ -10,10 +10,11 @@ from conftest import BLACK, RED, design, run_object
 
 from engine.ir.schema import (
     EmbroideryObject,
+    FillShape,
     ObjectKind,
     ObjectParams,
     ParamSource,
-    RailsShape,
+    PolylineShape,
 )
 from engine.plan import Cmd
 from engine.profiles.loader import load_profile
@@ -146,14 +147,25 @@ def test_one_colour_used_twice_does_not_change_colour():
 
 def test_unsupported_object_kinds_are_refused_with_their_milestone():
     """A confident bad file is the worst outcome; refusing is the feature."""
-    satin = EmbroideryObject(
+    fill = EmbroideryObject(
         id="obj_001",
-        kind=ObjectKind.SATIN,
-        shape=RailsShape(rails=([(0, 0), (20, 0)], [(0, 3), (20, 3)])),
+        kind=ObjectKind.FILL,
+        shape=FillShape(outer=[(0, 0), (20, 0), (20, 20), (0, 20)]),
         thread=BLACK,
     )
     with pytest.raises(UnsupportedObject, match="M1"):
-        generate(design([satin]))
+        generate(design([fill]))
+
+
+def test_text_objects_name_their_own_milestone():
+    text = EmbroideryObject(
+        id="obj_001",
+        kind=ObjectKind.TEXT,
+        shape=PolylineShape(points=[(0, 0), (20, 0)]),
+        thread=BLACK,
+    )
+    with pytest.raises(UnsupportedObject, match="M6"):
+        generate(design([text]))
 
 
 def test_parameters_come_from_the_profile_when_the_object_is_silent(twill):

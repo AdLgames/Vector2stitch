@@ -8,10 +8,10 @@ from engine.cli.main import EXIT_ERROR, EXIT_NOT_YET_BUILT, EXIT_OK, main
 from engine.ir.schema import (
     Design,
     EmbroideryObject,
+    FillShape,
     IRDocument,
     ObjectKind,
     Placement,
-    RailsShape,
     save_ir,
 )
 
@@ -80,8 +80,8 @@ def test_digitize_refuses_an_unbuilt_object_kind(tmp_path, capsys):
         objects=[
             EmbroideryObject(
                 id="obj_001",
-                kind=ObjectKind.SATIN,
-                shape=RailsShape(rails=([(0, 0), (20, 0)], [(0, 3), (20, 3)])),
+                kind=ObjectKind.FILL,
+                shape=FillShape(outer=[(0, 0), (20, 0), (20, 20), (0, 20)]),
                 thread={"chart": "madeira_polyneon_40", "code": "1800", "rgb": "#1a1a1a"},
             )
         ],
@@ -166,7 +166,7 @@ def test_calibrate_skips_a_pattern_that_needs_generators_we_lack(tmp_path, capsy
             "--out",
             str(tmp_path),
             "--patterns",
-            "column_ladder",
+            "density_wedge",
         ]
     )
     assert code == EXIT_OK

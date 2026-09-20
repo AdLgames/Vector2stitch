@@ -28,6 +28,17 @@ density:
   satin_spacing_mm: 0.40
   overlap_scale: 0.85        # thin out where layers stack, to avoid a patch
 
+satin:
+  # A column on a curve crowds its inner rail. Below this spacing the
+  # penetrations pile into one hole: thread break, then needle break.
+  short_stitch_min_spacing_mm: 0.25
+  # How far a shortened stitch crosses the column. Short enough to relieve the
+  # pile-up, long enough that the gap does not read as a notch in the edge.
+  short_stitch_depth: 0.65
+  # Lanes of a split column overlap by this, so the seam between them does not
+  # show as a line of fabric.
+  split_overlap_mm: 0.3
+
 compensation:
   pull_comp_mm_per_side: 0.175   # per side, along stitch direction
   push_comp_mm: 0.15             # trimmed off fill ends, perpendicular to pull
@@ -39,7 +50,8 @@ underlay:
   fill: [edge_run, tatami_low]
   satin_narrow_max_width_mm: 2.0
   satin_medium_max_width_mm: 4.0
-  inset_mm: 0.3                  # so underlay never peeks out past the top layer
+  inset_mm: 0.3
+  zigzag_spacing_multiplier: 3.0   # underlay zigzag is open; it supports, it does not cover                  # so underlay never peeks out past the top layer
 
 routing:
   trim_threshold_mm: 6.0         # travel longer than this gets a trim
