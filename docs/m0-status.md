@@ -21,6 +21,7 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Fabric profiles: twill, pique, cap | `engine/profiles/` | Loadable, versioned on disk; **none calibrated** |
 | Machine setup per fabric profile (thread, needle, speed, tension) | `engine/profiles/data/` | Done |
 | Machine profiles: the shop's own hardware, designer-edited | `engine/machines/` | Done; templates only, none calibrated |
+| Shop overrides on fabric profiles, with reasons recorded | `engine/profiles/overrides.py` | Done |
 | Parameter resolution with provenance | `engine/stitchgen/params.py` | Done |
 | Run stitch generation, ties, short-stitch filter, bean | `engine/stitchgen/run.py` | Done |
 | Satin: zigzag, pull comp, short stitches, auto-split (M1) | `engine/stitchgen/satin.py` | Done |
@@ -40,7 +41,7 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Determinism tests + committed fingerprints | `tests/test_determinism.py` | Done |
 | CI: lint, tests on 3.11/3.12, determinism on two OS images | `.github/workflows/ci.yml` | Done |
 
-318 tests pass; `ruff check` is clean.
+350 tests pass; `ruff check` is clean.
 
 ## Try it
 

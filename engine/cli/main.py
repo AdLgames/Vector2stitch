@@ -17,6 +17,12 @@ from engine.ir.schema import load_ir, save_ir
 from engine.lab import PATTERNS, PatternNotAvailable, build_pattern, measurement_sheet
 from engine.machines import MachineNotFound, available_machines, load_machine, resolve_setup
 from engine.profiles.loader import ProfileNotFound, available_profiles, load_profile
+from engine.profiles.overrides import (
+    OverrideError,
+    available_overrides,
+    effective_profile,
+    override_template,
+)
 from engine.simulate import render_file
 from engine.stitchgen import UnsupportedObject, UnsupportedProfile, generate
 from engine.version import SCHEMA_VERSION, engine_version
@@ -34,10 +40,14 @@ def _cmd_digitize(args: argparse.Namespace) -> int:
     """IR in, machine files out, every one of them round-trip verified."""
     doc = load_ir(args.ir)
     try:
-        profile = load_profile(doc.design.fabric_profile)
-    except ProfileNotFound as exc:
+        profile, overrides = effective_profile(doc.design.fabric_profile, args.profile_dir)
+    except (ProfileNotFound, OverrideError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
+
+    for applied in overrides:
+        flag = "  !! large change -- check this is not a typo" if applied.is_large else ""
+        print(f"override: {applied.describe()}{flag}")
 
     machine = None
     if args.machine:
@@ -48,7 +58,7 @@ def _cmd_digitize(args: argparse.Namespace) -> int:
             return EXIT_ERROR
 
     try:
-        plan = generate(doc, profile)
+        plan = generate(doc, profile, [applied.path for applied in overrides])
     except (UnsupportedObject, UnsupportedProfile) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return EXIT_NOT_YET_BUILT
@@ -79,7 +89,7 @@ def _cmd_digitize(args: argparse.Namespace) -> int:
         failed = failed or not report.ok
 
     sheet = out_dir / f"{stem}.worksheet.txt"
-    sheet.write_text(worksheet(doc, plan, profile, setup), encoding="utf-8")
+    sheet.write_text(worksheet(doc, plan, profile, setup, overrides), encoding="utf-8")
     print(f"{sheet.name}: written")
 
     if failed:
@@ -101,6 +111,56 @@ def _cmd_profiles(args: argparse.Namespace) -> int:
         profile = load_profile(ref)
         state = "calibrated" if profile.calibrated else "NOT calibrated"
         print(f"{ref:<12} {state:<15} {profile.description}")
+        _, overrides = effective_profile(ref, args.profile_dir)
+        for applied in overrides:
+            print(f"{'':<12} override  {applied.describe()}")
+    return EXIT_OK
+
+
+def _cmd_override_init(args: argparse.Namespace) -> int:
+    """Scaffold an override file for a shop to fill in."""
+    try:
+        profile = load_profile(args.profile)
+    except ProfileNotFound as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{profile.ref}.override.yaml"
+    if path.exists() and not args.force:
+        print(f"error: {path} exists; pass --force to replace it", file=sys.stderr)
+        return EXIT_ERROR
+
+    path.write_text(override_template(profile, args.shop), encoding="utf-8")
+    print(f"{path}: written")
+    print("Uncomment what your floor disagrees with, set a value, and say why.")
+    print(f"Then point --profile-dir or $V2S_PROFILE_DIR at {out_dir}.")
+    return EXIT_OK
+
+
+def _cmd_override_show(args: argparse.Namespace) -> int:
+    """Show every override on the search path, and what it changes."""
+    entries = available_overrides(args.profile_dir)
+    if not entries:
+        print("no override files found", file=sys.stderr)
+        return EXIT_ERROR
+
+    for ref, path in entries:
+        print(f"{ref}  ({path})")
+        try:
+            _, overrides = effective_profile(ref, args.profile_dir)
+        except (ProfileNotFound, OverrideError) as exc:
+            print(f"  error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+        for applied in overrides:
+            flag = "  !! large change" if applied.is_large else ""
+            print(f"  {applied.path}: {applied.shipped} -> {applied.value}{flag}")
+            print(f"    why: {applied.reason}")
+            if applied.evidence:
+                print(f"    evidence: {applied.evidence}")
+            else:
+                print("    evidence: none recorded -- experience, not measurement")
     return EXIT_OK
 
 
@@ -140,10 +200,13 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     try:
-        profile = load_profile(args.profile)
-    except ProfileNotFound as exc:
+        profile, overrides = effective_profile(args.profile, args.profile_dir)
+    except (ProfileNotFound, OverrideError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
+
+    for applied in overrides:
+        print(f"override: {applied.describe()}")
 
     machine = None
     if args.machine:
@@ -170,7 +233,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_ERROR
 
-        plan = generate(doc, profile)
+        plan = generate(doc, profile, [applied.path for applied in overrides])
         setup = resolve_setup(profile, doc, plan, machine, args.formats)
         if not setup.ok:
             for blocker in setup.blockers:
@@ -187,7 +250,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
                 return EXIT_ERROR
 
         (out_dir / f"{name}.worksheet.txt").write_text(
-            worksheet(doc, plan, profile, setup), encoding="utf-8"
+            worksheet(doc, plan, profile, setup, overrides), encoding="utf-8"
         )
         (out_dir / f"{name}.measure.txt").write_text(
             measurement_sheet(name, doc, profile, setup, targets), encoding="utf-8"
@@ -248,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="directory of your own machine profiles (or set V2S_MACHINE_DIR)",
     )
+    digitize.add_argument(
+        "--profile-dir",
+        default=None,
+        help="directory of your shop's profile overrides (or set V2S_PROFILE_DIR)",
+    )
     digitize.set_defaults(func=_cmd_digitize)
 
     render = sub.add_parser("render", help="render a machine file to SVG")
@@ -256,7 +324,26 @@ def build_parser() -> argparse.ArgumentParser:
     render.set_defaults(func=_cmd_render)
 
     profiles = sub.add_parser("profiles", help="list available fabric profiles")
+    profiles.add_argument(
+        "--profile-dir", default=None, help="your shop's profile override directory"
+    )
     profiles.set_defaults(func=_cmd_profiles)
+
+    override = sub.add_parser("override", help="your shop's changes to our fabric profiles")
+    override_sub = override.add_subparsers(dest="override_command", required=True)
+
+    override_init = override_sub.add_parser("init", help="scaffold an override file")
+    override_init.add_argument("profile", help="fabric profile reference, e.g. pique@1")
+    override_init.add_argument("--shop", required=True, help="who is recording these")
+    override_init.add_argument("--out", default="overrides", help="output directory")
+    override_init.add_argument("--force", action="store_true", help="replace an existing file")
+    override_init.set_defaults(func=_cmd_override_init)
+
+    override_show = override_sub.add_parser("show", help="show overrides and what they change")
+    override_show.add_argument(
+        "--profile-dir", default=None, help="your shop's profile override directory"
+    )
+    override_show.set_defaults(func=_cmd_override_show)
 
     machines = sub.add_parser("machines", help="list machine profiles on the search path")
     machines.add_argument(
@@ -289,6 +376,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--machine", default=None, help="machine profile reference")
     calibrate.add_argument("--machine-dir", default=None, help="your machine profile directory")
+    calibrate.add_argument(
+        "--profile-dir", default=None, help="your shop's profile override directory"
+    )
     calibrate.add_argument(
         "--list", action="store_true", help="list patterns and what each is for"
     )

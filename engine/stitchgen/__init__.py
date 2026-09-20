@@ -174,12 +174,21 @@ def _object_paths(
     )
 
 
-def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPlan:
+def generate(
+    doc: IRDocument,
+    profile: FabricProfile | None = None,
+    overrides: list[str] | None = None,
+) -> StitchPlan:
     """Turn a design into a stitch plan.
 
     Travel between objects becomes a trim when it is longer than the profile's
     threshold, and a jump otherwise. Hiding travel under later objects is the
     sequencer's job (M4); until then every gap is an honest jump or trim.
+
+    `overrides` names the profile fields a shop changed, so the plan -- and the
+    delivered file -- record that they ran something other than our defaults.
+    Passing an already-overridden profile without them produces stitches that
+    cannot be explained later, so the CLI always passes both together.
     """
     profile = profile or load_profile(doc.design.fabric_profile)
     if profile.machine.thread_weight_wt != CALIBRATED_THREAD_WEIGHT_WT:
@@ -189,7 +198,11 @@ def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPla
             "underlay and compensation all have to be re-derived for another weight -- "
             "fine lettering on 60 wt is M6."
         )
-    plan = StitchPlan(profile_ref=profile.ref, engine_version=doc.engine_version)
+    plan = StitchPlan(
+        profile_ref=profile.ref,
+        profile_overrides=sorted(overrides or []),
+        engine_version=doc.engine_version,
+    )
 
     threads: list[PlanThread] = []
     current_thread: str | None = None

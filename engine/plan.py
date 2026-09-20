@@ -54,6 +54,12 @@ class StitchPlan(BaseModel):
     schema_version: str = SCHEMA_VERSION
     engine_version: str = Field(default_factory=engine_version)
     profile_ref: str
+    profile_overrides: list[str] = Field(default_factory=list)
+    """Profile fields this shop overrode, as dotted paths.
+
+    Recorded on the plan, and printed on the worksheet, because a delivered
+    file has to say what made it. "twill@1" is not reproducible if the shop
+    quietly runs a different pull compensation."""
     stitches: list[PlanStitch] = Field(default_factory=list)
     threads: list[PlanThread] = Field(default_factory=list)
 

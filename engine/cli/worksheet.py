@@ -11,6 +11,7 @@ from engine.ir.schema import IRDocument
 from engine.machines.setup import MachineSetup, resolve_setup
 from engine.plan import Cmd, StitchPlan
 from engine.profiles.loader import FabricProfile
+from engine.profiles.overrides import AppliedOverride
 
 
 def estimate_runtime_minutes(plan: StitchPlan, setup: MachineSetup) -> float:
@@ -28,6 +29,7 @@ def worksheet(
     plan: StitchPlan,
     profile: FabricProfile,
     setup: MachineSetup | None = None,
+    overrides: list[AppliedOverride] | None = None,
 ) -> str:
     """Render the operator sheet for one design.
 
@@ -97,6 +99,16 @@ def worksheet(
             "!! machines. Test sew on scrap before any production run.",
             "",
         ]
+    if overrides:
+        lines += ["SHOP OVERRIDES", "-" * 60]
+        for applied in overrides:
+            flag = "  !! large change" if applied.is_large else ""
+            lines.append(f"{applied.path}: {applied.shipped} -> {applied.value}{flag}")
+            lines.append(f"    why: {applied.reason}")
+            if applied.evidence:
+                lines.append(f"    evidence: {applied.evidence}")
+        lines.append("")
+
     if setup.blockers:
         lines += ["!! WILL NOT SEW ON THIS MACHINE", "-" * 60]
         lines += [f"!! {blocker}" for blocker in setup.blockers]

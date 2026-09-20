@@ -12,6 +12,7 @@ embroidery objects → machine files (DST, PES, JEF, EXP) for commercial decorat
 | [`docs/machine-standards.md`](docs/machine-standards.md) | Commercial machine-side standards, and where the engine's values agree, differ, or are still guesses |
 | [`docs/calibration.md`](docs/calibration.md) | The loop that turns inherited defaults into measured ones: generate, sew, measure, record, read, change |
 | [`docs/machines.md`](docs/machines.md) | Describing your own machines, so speed, tension and sew field match the hardware in your room |
+| [`docs/overrides.md`](docs/overrides.md) | Overriding our fabric defaults with your own floor's numbers, and why the reason matters as much as the value |
 | [`docs/m0-status.md`](docs/m0-status.md) | Where the code is against those criteria right now |
 
 Read the quality doc first; the build plan is its companion and defers all
@@ -28,6 +29,7 @@ v2s digitize logo.ir.json --out out --machine your_machine   # against your own 
 v2s render out/m0_single_run.dst                          # SVG of the written file
 v2s calibrate --profile twill@1 --out out/calibration     # patterns to sew + sheets to measure
 v2s-lab record <targets.json> --measure square_01_x=19.8 ...   # record what came off the machine
+v2s override init pique@1 --shop "Your Shop"              # adjust our defaults to your floor
 ```
 
 Today the engine generates run objects from hand-authored IR. Satin and fill

@@ -28,6 +28,10 @@ before changing engine behaviour. Current milestone status:
    same design on two machines is two designs. Machine data may set speed and
    tension on the worksheet, and may block a file outright.
 
+9. **An override must carry its reason.** A shop's change to a profile is
+   recorded with why, and every delivered file names the fields that were not
+   ours. A number nobody can explain later is worse than a wrong one.
+
 ## Before you push
 
 ```sh
