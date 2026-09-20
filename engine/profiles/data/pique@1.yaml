@@ -21,7 +21,7 @@ stitch:
   tie_stitches: 3           # penetrations per tie, on every object start and before every trim
 
 density:
-  fill_row_spacing_mm: 0.42  # slightly open; the knit puckers under heavy fill
+  fill_row_spacing_mm: 0.45  # the knit puckers under heavy fill; commercial practice is 0.45-0.50
   satin_spacing_mm: 0.40
   overlap_scale: 0.85
 
@@ -45,4 +45,13 @@ routing:
 
 materials:
   stabilizer: "cutaway 2.0 oz"
-  topping: false
+  topping: true              # water-soluble: the weave texture swallows edges without it
+
+machine:
+  thread_weight_wt: 40
+  thread_type: polyester
+  needle_size: "75/11"
+  max_spm: 1000
+  bobbin_tension_gf_min: 18
+  bobbin_tension_gf_max: 22
+  top_to_bobbin_tension_ratio: 1.9

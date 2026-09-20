@@ -11,14 +11,25 @@ from engine.ir.schema import IRDocument
 from engine.plan import Cmd, StitchPlan
 from engine.profiles.loader import FabricProfile
 
-_RUN_TIME_SPM = 700
-"""Stitches per minute. A conservative commercial multi-needle average, used
-only for an estimate on the worksheet -- never for anything the engine decides."""
+
+def estimate_runtime_minutes(plan: StitchPlan, profile: FabricProfile) -> float:
+    """Rough machine time at the profile's recommended speed.
+
+    Needle time only. Trims, colour changes, hooping and operator handling are
+    what actually separate this number from a shop's real throughput, so treat
+    it as a floor, not a quote.
+    """
+    return plan.stitch_count() / profile.machine.max_spm
 
 
-def estimate_runtime_minutes(plan: StitchPlan) -> float:
-    """Rough machine time. Trims and colour changes add handling this ignores."""
-    return plan.stitch_count() / _RUN_TIME_SPM
+def top_tension_gf(profile: FabricProfile) -> float:
+    """Top tension target, derived from the gauge-measured bobbin baseline.
+
+    Setting top tension by feel is how two operators produce two different
+    results from the same file. The ratio comes from the profile.
+    """
+    baseline = (profile.machine.bobbin_tension_gf_min + profile.machine.bobbin_tension_gf_max) / 2
+    return baseline * profile.machine.top_to_bobbin_tension_ratio
 
 
 def worksheet(doc: IRDocument, plan: StitchPlan, profile: FabricProfile) -> str:
@@ -40,7 +51,18 @@ def worksheet(doc: IRDocument, plan: StitchPlan, profile: FabricProfile) -> str:
         f"Stitches         : {plan.stitch_count()}",
         f"Colour changes   : {max(len(plan.threads) - 1, 0)}",
         f"Trims / jumps    : {trims} / {jumps}",
-        f"Est. run time    : {estimate_runtime_minutes(plan):.1f} min at {_RUN_TIME_SPM} spm",
+        f"Est. run time    : {estimate_runtime_minutes(plan, profile):.1f} min at "
+        f"{profile.machine.max_spm} spm, needle time only",
+        "",
+        "MACHINE SETUP",
+        "-" * 60,
+        f"Thread           : {profile.machine.thread_weight_wt} wt {profile.machine.thread_type}",
+        f"Needle           : {profile.machine.needle_size}",
+        f"Max speed        : {profile.machine.max_spm} spm",
+        f"Bobbin tension   : {profile.machine.bobbin_tension_gf_min:.0f}"
+        f"-{profile.machine.bobbin_tension_gf_max:.0f} gf (gauge measured)",
+        f"Top tension      : ~{top_tension_gf(profile):.0f} gf "
+        f"({profile.machine.top_to_bobbin_tension_ratio:g}x the bobbin baseline)",
         "",
         "COLOUR SEQUENCE",
         "-" * 60,

@@ -15,10 +15,11 @@ from functools import cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _DATA_DIR = Path(__file__).parent / "data"
 _REF = re.compile(r"^(?P<name>[a-z0-9_]+)(?:@(?P<version>\d+))?$")
+_FILE = re.compile(r"^(?P<name>[a-z0-9_]+)@(?P<version>\d+)\.yaml$")
 
 
 class ProfileNotFound(LookupError):
@@ -95,6 +96,37 @@ class Materials(BaseModel):
     topping: bool
 
 
+class Machine(BaseModel):
+    """What the operator sets up at the machine.
+
+    These change nothing the engine computes -- they are carried so the
+    worksheet can tell the operator what to hang, what needle to fit, how fast
+    to run and what to set the tension to. A fabric profile that specifies
+    stitches but leaves those to memory is half a recipe.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    thread_weight_wt: int = Field(gt=0)
+    """Indirect weight: higher is finer. Engine geometry assumes 40 wt."""
+    thread_type: str
+    needle_size: str
+    max_spm: int = Field(gt=0)
+    """Recommended ceiling, not the machine's nameplate. Running above it buys
+    thread breaks and needle heat, which cost more time than the speed saves."""
+    bobbin_tension_gf_min: float = Field(gt=0)
+    bobbin_tension_gf_max: float = Field(gt=0)
+    top_to_bobbin_tension_ratio: float = Field(gt=0)
+    """Top tension is set as a multiple of a gauge-measured bobbin baseline,
+    rather than by feel."""
+
+    @model_validator(mode="after")
+    def _tension_range_is_a_range(self) -> Machine:
+        if self.bobbin_tension_gf_min > self.bobbin_tension_gf_max:
+            raise ValueError("bobbin tension min exceeds max")
+        return self
+
+
 class FabricProfile(BaseModel):
     """One calibrated (or not yet calibrated) material recipe."""
 
@@ -115,6 +147,7 @@ class FabricProfile(BaseModel):
     underlay: Underlay
     routing: Routing
     materials: Materials
+    machine: Machine
 
     @property
     def ref(self) -> str:
@@ -141,27 +174,58 @@ def load_profile(ref: str, data_dir: str | None = None) -> FabricProfile:
     """
     name, want_version = parse_ref(ref)
     directory = Path(data_dir) if data_dir else _DATA_DIR
-    path = directory / f"{name}.yaml"
-    if not path.exists():
+
+    versions = _versions_of(name, directory)
+    if not versions:
         raise ProfileNotFound(f"no profile file for {name!r} in {directory}")
 
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    profile = FabricProfile.model_validate(raw)
-
-    if profile.name != name:
-        raise ProfileNotFound(f"{path.name} declares name {profile.name!r}, expected {name!r}")
-    if want_version is not None and profile.version != want_version:
+    if want_version is None:
+        want_version = max(versions)
+    elif want_version not in versions:
         raise ProfileNotFound(
-            f"profile {name!r} is at version {profile.version}, design pins @{want_version}"
+            f"profile {name!r} has versions {sorted(versions)}, design pins @{want_version}. "
+            "Old versions are kept precisely so old designs reopen; this one is missing."
+        )
+
+    path = directory / f"{name}@{want_version}.yaml"
+    profile = FabricProfile.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+    if (profile.name, profile.version) != (name, want_version):
+        raise ProfileNotFound(
+            f"{path.name} declares {profile.name}@{profile.version}, expected {name}@{want_version}"
         )
     return profile
 
 
+def _versions_of(name: str, directory: Path) -> set[int]:
+    """Every version of one profile on disk."""
+    found = set()
+    for path in directory.glob(f"{name}@*.yaml"):
+        match = _FILE.match(path.name)
+        if match and match.group("name") == name:
+            found.add(int(match.group("version")))
+    return found
+
+
 def available_profiles(data_dir: str | None = None) -> list[str]:
-    """Every shipped profile reference, sorted."""
+    """Every shipped profile reference, including superseded versions.
+
+    Superseded versions stay on disk and stay loadable: a design delivered
+    against pique@1 must still reproduce byte for byte after pique@2 ships.
+    """
     directory = Path(data_dir) if data_dir else _DATA_DIR
     refs = []
-    for path in sorted(directory.glob("*.yaml")):
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        refs.append(f"{raw['name']}@{raw['version']}")
-    return refs
+    for path in directory.glob("*.yaml"):
+        match = _FILE.match(path.name)
+        if match:
+            refs.append((match.group("name"), int(match.group("version"))))
+    return [f"{name}@{version}" for name, version in sorted(refs)]
+
+
+def current_profiles(data_dir: str | None = None) -> list[str]:
+    """The newest version of each profile -- what a new order gets pinned to."""
+    latest: dict[str, int] = {}
+    for ref in available_profiles(data_dir):
+        name, version = parse_ref(ref)
+        latest[name] = max(latest.get(name, 0), version or 0)
+    return [f"{name}@{version}" for name, version in sorted(latest.items())]

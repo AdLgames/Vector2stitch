@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
 from conftest import BLACK, RED, design, run_object
@@ -16,7 +17,7 @@ from engine.ir.schema import (
 )
 from engine.plan import Cmd
 from engine.profiles.loader import load_profile
-from engine.stitchgen import UnsupportedObject, generate, resolve
+from engine.stitchgen import UnsupportedObject, UnsupportedProfile, generate, resolve
 from engine.stitchgen.run import apply_bean, drop_short_stitches, resample, stitch_run, tie_points
 
 
@@ -194,3 +195,18 @@ def test_thread_order_follows_sew_order(two_color_design):
     plan = generate(two_color_design)
     assert plan.threads[0].code == "1800"
     assert plan.threads[1].rgb == RED.rgb
+
+
+def test_a_profile_on_another_thread_weight_is_refused(tmp_path, single_run_design):
+    """Geometry is sized to what 40 wt covers. Swapping the cone without
+    re-deriving density leaves gaps, or over-stitches and snaps thread."""
+    import yaml
+
+    source = Path("engine/profiles/data/twill@1.yaml")
+    raw = yaml.safe_load(source.read_text())
+    raw["name"] = "fine"
+    raw["machine"]["thread_weight_wt"] = 60
+    (tmp_path / "fine@1.yaml").write_text(yaml.safe_dump(raw))
+
+    with pytest.raises(UnsupportedProfile, match="60 wt"):
+        generate(single_run_design, load_profile("fine@1", str(tmp_path)))

@@ -130,3 +130,22 @@ def test_unbuilt_commands_say_so_distinctly(capsys, argv, needle):
     """Exit 3 is "not built yet", not "broken": scripts can tell them apart."""
     assert main(argv) == EXIT_NOT_YET_BUILT
     assert needle in capsys.readouterr().err
+
+
+def test_worksheet_carries_the_machine_setup(tmp_path):
+    """Thread, needle, speed and tension, so the operator is not guessing."""
+    main(
+        [
+            "digitize",
+            str(EXAMPLES / "m0_two_color_run.ir.json"),
+            "--out",
+            str(tmp_path),
+            "--formats",
+            "dst",
+        ]
+    )
+    sheet = (tmp_path / "m0_two_color_run.worksheet.txt").read_text()
+    assert "MACHINE SETUP" in sheet
+    assert "40 wt polyester" in sheet
+    assert "75/11" in sheet
+    assert "gf (gauge measured)" in sheet

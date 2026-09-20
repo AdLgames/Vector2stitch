@@ -49,3 +49,12 @@ routing:
 materials:
   stabilizer: "cutaway 2.0 oz"
   topping: false
+
+machine:
+  thread_weight_wt: 40          # engine geometry assumes 40 wt; finer text needs 60 wt
+  thread_type: polyester
+  needle_size: "75/11"
+  max_spm: 1000                 # recommended ceiling, not the machine's nameplate
+  bobbin_tension_gf_min: 18     # measured on a bobbin-case gauge, not by feel
+  bobbin_tension_gf_max: 22
+  top_to_bobbin_tension_ratio: 1.9

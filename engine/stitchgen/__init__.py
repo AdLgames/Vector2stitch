@@ -15,7 +15,26 @@ from engine.profiles.loader import FabricProfile, load_profile
 from engine.stitchgen.params import ResolvedParams, resolve
 from engine.stitchgen.run import stitch_run, tie_points
 
-__all__ = ["UnsupportedObject", "generate", "resolve", "ResolvedParams"]
+__all__ = [
+    "ResolvedParams",
+    "UnsupportedObject",
+    "UnsupportedProfile",
+    "generate",
+    "resolve",
+]
+
+CALIBRATED_THREAD_WEIGHT_WT = 40
+"""The thread weight the geometry assumes.
+
+Density, underlay and compensation defaults are all sized to what 40 wt
+covers. Sewing a file digitized for 40 wt with 60 wt leaves gaps; the reverse
+over-stitches and breaks thread. Supporting another weight means recalibrating
+those numbers, not just changing the cone.
+"""
+
+
+class UnsupportedProfile(NotImplementedError):
+    """The profile asks for something the generators are not calibrated for."""
 
 
 class UnsupportedObject(NotImplementedError):
@@ -58,6 +77,13 @@ def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPla
     sequencer's job (M4); until then every gap is an honest jump or trim.
     """
     profile = profile or load_profile(doc.design.fabric_profile)
+    if profile.machine.thread_weight_wt != CALIBRATED_THREAD_WEIGHT_WT:
+        raise UnsupportedProfile(
+            f"{profile.ref} specifies {profile.machine.thread_weight_wt} wt thread, but the "
+            f"generators are calibrated for {CALIBRATED_THREAD_WEIGHT_WT} wt. Densities, "
+            "underlay and compensation all have to be re-derived for another weight -- "
+            "fine lettering on 60 wt is M6."
+        )
     plan = StitchPlan(profile_ref=profile.ref, engine_version=doc.engine_version)
 
     threads: list[PlanThread] = []
