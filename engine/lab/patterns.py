@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from engine.ir.schema import (
     Design,
     EmbroideryObject,
+    FillShape,
     IRDocument,
     ObjectKind,
     ObjectParams,
@@ -84,7 +85,11 @@ def _document(profile_ref: str, objects: list[EmbroideryObject]) -> IRDocument:
         point
         for obj in objects
         for point in (
-            _column_outline(obj) if obj.kind is ObjectKind.SATIN else obj.shape.points
+            _column_outline(obj)
+            if obj.kind is ObjectKind.SATIN
+            else _fill_outline(obj)
+            if obj.kind is ObjectKind.FILL
+            else obj.shape.points
         )
     ]
     min_x = min(x for x, _ in points)
@@ -419,6 +424,106 @@ def column_ladder(profile_ref: str) -> tuple[IRDocument, list[MeasurementTarget]
     return _document(profile_ref, objects), targets
 
 
+def _fill(
+    object_id: str,
+    outer: list[tuple[float, float]],
+    *,
+    holes: list[list[tuple[float, float]]] | None = None,
+    thread: Thread = BLACK,
+    z_order: int = 0,
+    params: ObjectParams | None = None,
+    param_source: dict[str, ParamSource] | None = None,
+) -> EmbroideryObject:
+    return EmbroideryObject(
+        id=object_id,
+        kind=ObjectKind.FILL,
+        shape=FillShape(outer=outer, holes=holes or []),
+        thread=thread,
+        z_order=z_order,
+        params=params or ObjectParams(),
+        param_source=param_source or {},
+    )
+
+
+def density_wedge(profile_ref: str) -> tuple[IRDocument, list[MeasurementTarget]]:
+    """Fill panels at rising densities.
+
+    Density is the parameter with the most ways to be wrong. Too open and the
+    fabric shows through; too dense and the panel puckers, stiffens and breaks
+    thread. Neither failure is visible on screen, and the threshold moves with
+    every fabric -- which is the whole reason this pattern exists.
+
+    Draw-in is the number to measure: a denser panel pulls the fabric in
+    harder, so the sewn square comes out smaller. Where that stops being
+    recoverable by compensation is where the density limit sits.
+    """
+    cap = _is_cap(profile_ref)
+    side = 18.0 if cap else 25.0
+    spacings = (0.30, 0.35, 0.40, 0.45, 0.50)
+
+    objects: list[EmbroideryObject] = []
+    targets: list[MeasurementTarget] = []
+    x = 5.0
+    for index, spacing in enumerate(spacings, start=1):
+        objects.append(
+            _fill(
+                f"panel_{index:02d}",
+                _square((x, 5.0), side),
+                z_order=index,
+                params=ObjectParams(density_mm=spacing),
+                param_source={"density_mm": ParamSource.RULE},
+            )
+        )
+        targets += [
+            MeasurementTarget(
+                id=f"panel_{index:02d}_x",
+                description=(
+                    f"{side:.0f} mm panel at {spacing:.2f} mm row spacing, across. "
+                    "Check coverage, puckering and any thread breaks."
+                ),
+                designed_mm=side,
+                axis=Axis.X,
+            ),
+            MeasurementTarget(
+                id=f"panel_{index:02d}_y",
+                description=f"{side:.0f} mm panel at {spacing:.2f} mm row spacing, up",
+                designed_mm=side,
+                axis=Axis.Y,
+            ),
+        ]
+        x += side + 6.0
+
+    # One panel with a hole, at the profile's own density: holes are where a
+    # fill generator goes wrong quietly, stitching across what should be bare.
+    hole_origin = (5.0, 5.0 + side + 8.0)
+    objects.append(
+        _fill(
+            "panel_hole",
+            _square(hole_origin, side),
+            holes=[_square((hole_origin[0] + side / 3, hole_origin[1] + side / 3), side / 3)],
+            z_order=len(spacings) + 1,
+        )
+    )
+    targets.append(
+        MeasurementTarget(
+            id="panel_hole_window",
+            description=(
+                f"{side / 3:.0f} mm window in a filled panel: must be bare fabric, "
+                "with no stitches crossing it"
+            ),
+            designed_mm=side / 3,
+            axis=Axis.X,
+        )
+    )
+
+    return _document(profile_ref, objects), targets
+
+
+def _fill_outline(obj: EmbroideryObject) -> list[tuple[float, float]]:
+    """A fill object's rings, for the bounding box in _document."""
+    return list(obj.shape.outer) + [point for hole in obj.shape.holes for point in hole]
+
+
 def _column_outline(obj: EmbroideryObject) -> list[tuple[float, float]]:
     """A satin object's rails, for the bounding box in _document."""
     left, right = obj.shape.rails
@@ -461,8 +566,7 @@ PATTERNS: dict[str, CalibrationPattern] = {
         CalibrationPattern(
             name="density_wedge",
             purpose="Tatami fill at rising densities: puckering, coverage, thread breaks",
-            build=None,
-            requires="M1",
+            build=density_wedge,
         ),
         CalibrationPattern(
             name="text_ladder",

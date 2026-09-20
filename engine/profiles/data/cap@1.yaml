@@ -37,6 +37,23 @@ satin:
   # show as a line of fabric.
   split_overlap_mm: 0.3
 
+fill:
+  # Rows at 45 degrees by default: a fill sewn along a shape's own axis shows
+  # every row end as a ragged edge. Per-object angle overrides this.
+  default_angle_deg: 45.0
+  # Penetrations stacked in a column across rows cut the fabric along that
+  # line and read as a seam through the fill. Each row shifts by 1/4 stitch.
+  stagger_steps: 4
+  # A span narrower than this cannot hold a stitch. It is left to the outline
+  # or the satin bordering it rather than sewn as a stub.
+  min_span_mm: 1.0
+  # Rows are sampled on scanlines, so where a hole's corner falls between two
+  # of them the turn can clip the corner by up to half a row spacing. Holes
+  # are grown by this much before the fill is generated, which keeps a window
+  # genuinely bare; the hairline it leaves is covered by the edge-run underlay
+  # and by whatever borders the shape.
+  hole_clearance_mm: 0.3
+
 compensation:
   pull_comp_mm_per_side: 0.30
   push_comp_mm: 0.20
@@ -50,6 +67,8 @@ underlay:
   satin_medium_max_width_mm: 4.0
   inset_mm: 0.3
   zigzag_spacing_multiplier: 3.0   # underlay zigzag is open; it supports, it does not cover
+  tatami_spacing_multiplier: 4.0   # fill underlay is far more open than the layer above it
+  tatami_angle_offset_deg: 90.0    # crossing the top layer is what makes it support   # underlay zigzag is open; it supports, it does not cover
 
 routing:
   trim_threshold_mm: 6.0

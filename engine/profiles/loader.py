@@ -62,6 +62,15 @@ class Satin(BaseModel):
     split_overlap_mm: float = Field(ge=0)
 
 
+class Fill(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    default_angle_deg: float
+    stagger_steps: int = Field(ge=1)
+    min_span_mm: float = Field(gt=0)
+    hole_clearance_mm: float = Field(ge=0)
+
+
 class Compensation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -80,6 +89,8 @@ class Underlay(BaseModel):
     satin_medium_max_width_mm: float = Field(gt=0)
     inset_mm: float = Field(ge=0)
     zigzag_spacing_multiplier: float = Field(gt=1)
+    tatami_spacing_multiplier: float = Field(gt=1)
+    tatami_angle_offset_deg: float
 
     def for_satin(self, width_mm: float) -> list[str]:
         """The underlay recipe for a satin column of this width."""
@@ -153,6 +164,7 @@ class FabricProfile(BaseModel):
     stitch: StitchLengths
     density: Density
     satin: Satin
+    fill: Fill
     compensation: Compensation
     underlay: Underlay
     routing: Routing

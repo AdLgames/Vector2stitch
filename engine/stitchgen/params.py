@@ -35,6 +35,13 @@ class ResolvedParams:
     underlay_inset_mm: float = 0.0
     underlay_run_length_mm: float = 0.0
     underlay_zigzag_spacing_mm: float = 0.0
+    underlay_tatami_spacing_mm: float = 0.0
+    underlay_tatami_angle_deg: float = 0.0
+    angle_deg: float = 0.0
+    stagger_steps: int = 1
+    push_comp_mm: float = 0.0
+    min_span_mm: float = 0.0
+    hole_clearance_mm: float = 0.0
 
 
 def resolve(
@@ -71,6 +78,10 @@ def resolve(
     default_underlay: list[str] = []
     if obj.kind is ObjectKind.SATIN and width_mm is not None:
         default_underlay = profile.underlay.for_satin(width_mm)
+    elif obj.kind is ObjectKind.FILL:
+        default_underlay = list(profile.underlay.fill)
+
+    angle_deg = float(pick("angle_deg", obj.params.angle_deg, profile.fill.default_angle_deg))
 
     return ResolvedParams(
         stitch_length_mm=float(
@@ -114,4 +125,13 @@ def resolve(
         underlay_zigzag_spacing_mm=(
             profile.density.satin_spacing_mm * profile.underlay.zigzag_spacing_multiplier
         ),
+        underlay_tatami_spacing_mm=(
+            profile.density.fill_row_spacing_mm * profile.underlay.tatami_spacing_multiplier
+        ),
+        underlay_tatami_angle_deg=angle_deg + profile.underlay.tatami_angle_offset_deg,
+        angle_deg=angle_deg,
+        stagger_steps=profile.fill.stagger_steps,
+        push_comp_mm=profile.compensation.push_comp_mm,
+        min_span_mm=profile.fill.min_span_mm,
+        hole_clearance_mm=profile.fill.hole_clearance_mm,
     )

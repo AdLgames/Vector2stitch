@@ -8,8 +8,9 @@ What is compared, and why not everything:
 
 * **Penetrations** -- exact equality, in order. This is the design.
 * **Colour changes** -- exact count. A lost one merges two colours into one.
-* **Move lengths** -- none may exceed the format limit after the writer's own
-  encoding pass.
+* **Move lengths** -- no move may exceed the format's per-axis limit after the
+  writer's own encoding pass. Per axis, because that is how the formats encode
+  a move: one delta per axis, each with its own field.
 
 Trims are reported but not asserted, because formats legitimately differ: DST
 encodes a trim as a jump sequence and it reads back as jumps, while PES inserts
@@ -18,7 +19,6 @@ implicit trims of its own. Asserting equality there would fail on correct files.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,6 +47,7 @@ class RoundTripReport:
     trims_expected: int
     trims_found: int
     max_move_mm: float
+    """The longest single-axis delta in the file."""
     max_move_allowed_mm: float
     problems: list[str] = field(default_factory=list)
 
@@ -99,8 +100,8 @@ def verify(plan: StitchPlan, path: str | Path) -> RoundTripReport:
     for x, y, cmd in read:
         if cmd in (pyembroidery.STITCH, pyembroidery.JUMP):
             if previous is not None:
-                span = math.hypot(x - previous[0], y - previous[1])
-                longest = max(longest, units_to_mm(round(span), limits.unit_mm))
+                span = max(abs(x - previous[0]), abs(y - previous[1]))
+                longest = max(longest, units_to_mm(span, limits.unit_mm))
             previous = (x, y)
 
     report = RoundTripReport(
@@ -130,7 +131,7 @@ def verify(plan: StitchPlan, path: str | Path) -> RoundTripReport:
         )
     if longest > limits.max_move_mm + limits.unit_mm / 2:
         report.problems.append(
-            f"longest move {longest:.2f} mm exceeds the {limits.extension} limit "
+            f"longest single-axis move {longest:.2f} mm exceeds the {limits.extension} limit "
             f"of {limits.max_move_mm:.2f} mm"
         )
     return report

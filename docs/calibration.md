@@ -38,18 +38,26 @@ stitch_length_ladder   ready        Where a run stops reading as a line on this 
 travel_and_trim        ready        Where an untrimmed travel becomes visible
 corner_set             ready        Corner cutting at angles from 15 to 120 degrees
 column_ladder          ready        Satin column widths: split point, edge quality, underlay
-density_wedge          needs M1     Tatami fill at rising densities
+density_wedge          ready        Tatami fill at rising densities
 text_ladder            needs M6     Lettering from 3 to 10 mm
 ```
 
-Two of the eight are not built. They are declared rather than omitted,
-because what is missing is exactly what the lab exists to close: until fill
-generates, `fill_row_spacing_mm` cannot be calibrated at all. What can be
-calibrated today is dimensional accuracy, registration, run length, trim
-threshold, corner behaviour, and -- since satin generates -- column width, pull
-compensation, the underlay bands and where a column has to start splitting.
+One of the eight is not built. They are declared rather than omitted,
+because what is missing is exactly what the lab exists to close. The text
+ladder waits on licensed embroidery fonts, which is a purchasing decision more
+than an engineering one.
 
-The column ladder is the most informative sheet in the set, because column
+Everything else can be measured now: dimensional accuracy, registration, run
+length, trim threshold, corner behaviour, satin column width and where a
+column has to start splitting, the underlay bands, and fill density.
+
+The density wedge is where a fabric's limit actually shows up. Draw-in is the
+number to measure: a denser panel pulls the fabric in harder, so the sewn
+square comes out smaller, and where that stops being recoverable by
+compensation is where the density limit sits. Puckering and thread breaks show
+up on the same panels, and neither is visible on screen.
+
+The column ladder is the most informative sheet for satin, because column
 width decides four things at once: whether pull compensation is right, whether
 the underlay recipe switches at the right widths, where splitting has to
 start, and whether the edges are clean enough to sell. Its widest column is

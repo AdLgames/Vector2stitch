@@ -128,11 +128,10 @@ def test_stitch_length_ladder_actually_varies_stitch_length():
 
 
 def test_patterns_that_need_generators_we_lack_are_declared_not_hidden():
-    """What is left is waiting on fill and text. Omitting them would hide
-    exactly the gap the lab exists to close."""
-    assert PENDING == ["density_wedge", "text_ladder"]
+    """Only text is left now, waiting on licensed embroidery fonts."""
+    assert PENDING == ["text_ladder"]
     for name in PENDING:
-        assert PATTERNS[name].requires in {"M1", "M6"}
+        assert PATTERNS[name].requires == "M6"
         assert PATTERNS[name].purpose
 
 
@@ -174,4 +173,10 @@ def test_no_calibration_pattern_sews_an_illegal_stitch(profile_ref):
         ]
         shortest = min(length for length in lengths if length > 0)
         assert max(lengths) <= profile.stitch.max_length_mm, name
-        assert shortest >= profile.stitch.min_length_mm * 0.99, name
+        # The stitch floor applies within a row or column. A fill's turn from
+        # one row to the next is about one row spacing long by construction --
+        # shorter where the boundary runs diagonally to the rows -- and those
+        # turns are structural, so they are not filtered. M2's checks will
+        # need to know the difference.
+        floor = min(profile.stitch.min_length_mm, profile.density.fill_row_spacing_mm * 0.5)
+        assert shortest >= floor, name

@@ -18,7 +18,14 @@ class FormatLimits:
     extension: str
     unit_mm: float
     max_move_mm: float
-    """Longest single move, jump or stitch. Longer travel is split."""
+    """Longest single move **on either axis**, jump or stitch.
+
+    Not a Euclidean distance. These formats encode a move as a pair of deltas,
+    one per axis, each of which has to fit the format's field -- so a diagonal
+    move of 12.1 mm in x and 12.1 mm in y is 17.1 mm long and perfectly legal,
+    while 12.2 mm in x alone is not. Splitting and checking both work per axis
+    for that reason.
+    """
     supports_thread_colors: bool
     """False means the file carries a colour *sequence* but not the thread
     identities; the worksheet is how the shop knows what to hang."""

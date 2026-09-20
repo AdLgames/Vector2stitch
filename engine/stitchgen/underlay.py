@@ -95,11 +95,21 @@ def _cumulative(points: list[Point]) -> list[float]:
 
 
 def _resample(points: list[Point], step_mm: float) -> list[Point]:
+    """Resample a path, keeping its corners.
+
+    Spacing purely by arc length would drop the original vertices, and the
+    path would cut across every corner. On a ring around a hole that chord
+    goes straight through the hole, which is how an underlay ends up stitching
+    a window shut.
+    """
+    from engine.stitchgen.run import resample as corner_preserving
+
     total = path_length(points)
     if total == 0 or step_mm <= 0:
         return points
-    count = max(2, round(total / step_mm) + 1)
-    return sample_evenly(points, count)
+    return corner_preserving(
+        points, closed=False, target_length_mm=step_mm, max_length_mm=step_mm
+    )
 
 
 def center_run(pairs: list[tuple[Point, Point]], spec: UnderlaySpec) -> list[list[Point]]:
@@ -180,4 +190,90 @@ def satin_underlay(
             raise UnknownUnderlay(
                 f"no generator for underlay {name!r}; satin recipes are {list(SATIN_RECIPES)}"
             )
+    return [layer for layer in layers if len(layer) >= 2]
+
+
+@dataclass(frozen=True)
+class FillUnderlaySpec:
+    """Underlay parameters for an area fill."""
+
+    inset_mm: float
+    run_length_mm: float
+    tatami_spacing_mm: float
+    tatami_angle_deg: float
+    stagger_steps: int
+    min_length_mm: float
+    min_span_mm: float
+
+
+def fill_edge_run(
+    outer: list[Point], holes: list[list[Point]], spec: FillUnderlaySpec
+) -> list[list[Point]]:
+    """A run just inside the outline, and just outside every hole.
+
+    It is what holds the fill's edge where it was drawn. Each ring is its own
+    path: a fill with holes has boundaries that are genuinely separate, and
+    joining them would drag thread across the middle of the shape.
+    """
+    from engine.stitchgen.offset import inset_shape
+
+    inset_outer, grown_holes = inset_shape(outer, holes, spec.inset_mm)
+    paths = []
+    for ring in [*inset_outer, *grown_holes]:
+        closed = ring if ring[0] == ring[-1] else [*ring, ring[0]]
+        paths.append(_resample(closed, spec.run_length_mm))
+    return paths
+
+
+def fill_tatami_low(
+    outer: list[Point], holes: list[list[Point]], spec: FillUnderlaySpec
+) -> list[list[Point]]:
+    """A very open fill, crossing the top layer's angle.
+
+    Crossing is what makes it support rather than add: rows at the same angle
+    as the layer above would sit in the same valleys and do nothing. This is
+    the layer that lets the top fill be sewn more open and still cover.
+    """
+    from engine.stitchgen.fill import FillSpec, stitch_fill
+    from engine.stitchgen.offset import inset_shape
+
+    inset_outer, grown_holes = inset_shape(outer, holes, spec.inset_mm)
+    if not inset_outer:
+        return []
+
+    fill_spec = FillSpec(
+        row_spacing_mm=spec.tatami_spacing_mm,
+        stitch_length_mm=spec.run_length_mm,
+        min_length_mm=spec.min_length_mm,
+        angle_deg=spec.tatami_angle_deg,
+        stagger_steps=spec.stagger_steps,
+        pull_comp_mm_per_side=0.0,
+        push_comp_mm=0.0,
+        min_span_mm=spec.min_span_mm,
+    )
+    paths = []
+    for ring in inset_outer:
+        paths += stitch_fill(ring, grown_holes, fill_spec)
+    return paths
+
+
+def fill_underlay(
+    recipe: list[str],
+    outer: list[Point],
+    holes: list[list[Point]],
+    spec: FillUnderlaySpec,
+) -> list[list[Point]]:
+    """Build every layer in a fill's recipe, in the order the profile lists it."""
+    layers: list[list[Point]] = []
+    for name in recipe:
+        if name == EDGE_RUN:
+            layers += fill_edge_run(outer, holes, spec)
+        elif name == TATAMI_LOW:
+            layers += fill_tatami_low(outer, holes, spec)
+        elif name in (CENTER_RUN, ZIGZAG):
+            raise UnknownUnderlay(
+                f"{name!r} is a satin underlay; a fill takes {EDGE_RUN} and {TATAMI_LOW}"
+            )
+        else:
+            raise UnknownUnderlay(f"no generator for underlay {name!r}")
     return [layer for layer in layers if len(layer) >= 2]

@@ -10,7 +10,6 @@ from conftest import BLACK, RED, design, run_object
 
 from engine.ir.schema import (
     EmbroideryObject,
-    FillShape,
     ObjectKind,
     ObjectParams,
     ParamSource,
@@ -143,18 +142,6 @@ def test_one_colour_used_twice_does_not_change_colour():
     plan = generate(doc)
     assert not any(s.cmd is Cmd.COLOR_CHANGE for s in plan.stitches)
     assert len(plan.threads) == 1
-
-
-def test_unsupported_object_kinds_are_refused_with_their_milestone():
-    """A confident bad file is the worst outcome; refusing is the feature."""
-    fill = EmbroideryObject(
-        id="obj_001",
-        kind=ObjectKind.FILL,
-        shape=FillShape(outer=[(0, 0), (20, 0), (20, 20), (0, 20)]),
-        thread=BLACK,
-    )
-    with pytest.raises(UnsupportedObject, match="M1"):
-        generate(design([fill]))
 
 
 def test_text_objects_name_their_own_milestone():

@@ -12,11 +12,13 @@ import math
 from engine.ir.schema import EmbroideryObject, IRDocument, ObjectKind
 from engine.plan import Cmd, PlanStitch, PlanThread, StitchPlan
 from engine.profiles.loader import FabricProfile, load_profile
+from engine.stitchgen.fill import FillSpec, stitch_fill
 from engine.stitchgen.geometry import distance
+from engine.stitchgen.offset import offset_ring
 from engine.stitchgen.params import ResolvedParams, resolve
 from engine.stitchgen.run import stitch_run, tie_points
 from engine.stitchgen.satin import SatinSpec, rail_pairs, sample_count, stitch_satin
-from engine.stitchgen.underlay import UnderlaySpec, satin_underlay
+from engine.stitchgen.underlay import FillUnderlaySpec, UnderlaySpec, fill_underlay, satin_underlay
 
 __all__ = [
     "ResolvedParams",
@@ -48,7 +50,6 @@ class UnsupportedObject(NotImplementedError):
 
 
 _MILESTONE_FOR_KIND = {
-    ObjectKind.FILL: "M1",
     ObjectKind.TEXT: "M6",
 }
 
@@ -100,6 +101,52 @@ def _satin_paths(obj: EmbroideryObject, params: ResolvedParams) -> list[list[tup
     return paths
 
 
+def _fill_paths(obj: EmbroideryObject, params: ResolvedParams) -> list[list[tuple[float, float]]]:
+    """Underlay layers first, then the fill itself."""
+    outer = list(obj.shape.outer)
+    holes = [list(hole) for hole in obj.shape.holes]
+
+    # Grow the holes before anything is generated. Scanline sampling can clip
+    # a hole's corner by up to half a row spacing, and a window that is
+    # supposed to be bare fabric is not the place to spend that tolerance.
+    stitched_holes = [
+        grown
+        for hole in holes
+        for grown in offset_ring(hole, params.hole_clearance_mm)
+    ] if params.hole_clearance_mm > 0 else holes
+
+    paths = fill_underlay(
+        params.underlay,
+        outer,
+        stitched_holes,
+        FillUnderlaySpec(
+            inset_mm=params.underlay_inset_mm,
+            run_length_mm=params.underlay_run_length_mm,
+            tatami_spacing_mm=params.underlay_tatami_spacing_mm,
+            tatami_angle_deg=params.underlay_tatami_angle_deg,
+            stagger_steps=params.stagger_steps,
+            min_length_mm=params.min_stitch_length_mm,
+            min_span_mm=params.min_span_mm,
+        ),
+    )
+
+    paths += stitch_fill(
+        outer,
+        stitched_holes,
+        FillSpec(
+            row_spacing_mm=params.density_mm,
+            stitch_length_mm=params.stitch_length_mm,
+            min_length_mm=params.min_stitch_length_mm,
+            angle_deg=params.angle_deg,
+            stagger_steps=params.stagger_steps,
+            pull_comp_mm_per_side=params.pull_comp_mm_per_side,
+            push_comp_mm=params.push_comp_mm,
+            min_span_mm=params.min_span_mm,
+        ),
+    )
+    return paths
+
+
 def _object_paths(
     obj: EmbroideryObject, params: ResolvedParams
 ) -> list[list[tuple[float, float]]]:
@@ -117,11 +164,13 @@ def _object_paths(
         ]
     if obj.kind is ObjectKind.SATIN:
         return _satin_paths(obj, params)
+    if obj.kind is ObjectKind.FILL:
+        return _fill_paths(obj, params)
 
     milestone = _MILESTONE_FOR_KIND[obj.kind]
     raise UnsupportedObject(
         f"object {obj.id!r}: {obj.kind.value} stitching lands in {milestone}; "
-        f"this engine build generates run and satin objects"
+        f"this engine build generates run, satin and fill objects"
     )
 
 
@@ -192,15 +241,21 @@ def generate(doc: IRDocument, profile: FabricProfile | None = None) -> StitchPla
             # Ties go at the object's start and end, not around every layer:
             # an underlay layer is covered by what follows it, and tying each
             # one would leave knots under the top stitches.
+            emit = points
             if path_index == 0:
-                for point in tie_points(
+                tie_in = tie_points(
                     start, points[1], params.tie_length_mm, params.tie_stitches
-                ):
+                )
+                for point in tie_in:
                     plan.stitches.append(
                         PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
                     )
+                # The tie ends on the anchor, which is also the path's first
+                # point. Emitting both puts two stitches in one hole.
+                if tie_in and tie_in[-1] == points[0]:
+                    emit = points[1:]
 
-            for point in points:
+            for point in emit:
                 plan.stitches.append(
                     PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
                 )

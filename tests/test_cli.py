@@ -8,10 +8,10 @@ from engine.cli.main import EXIT_ERROR, EXIT_NOT_YET_BUILT, EXIT_OK, main
 from engine.ir.schema import (
     Design,
     EmbroideryObject,
-    FillShape,
     IRDocument,
     ObjectKind,
     Placement,
+    PolylineShape,
     save_ir,
 )
 
@@ -69,6 +69,7 @@ def test_worksheet_says_when_the_profile_is_not_calibrated(tmp_path):
 
 
 def test_digitize_refuses_an_unbuilt_object_kind(tmp_path, capsys):
+    """Text is all that is left: it needs embroidery fonts, which are M6."""
     doc = IRDocument(
         design=Design(
             width_mm=40,
@@ -80,8 +81,8 @@ def test_digitize_refuses_an_unbuilt_object_kind(tmp_path, capsys):
         objects=[
             EmbroideryObject(
                 id="obj_001",
-                kind=ObjectKind.FILL,
-                shape=FillShape(outer=[(0, 0), (20, 0), (20, 20), (0, 20)]),
+                kind=ObjectKind.TEXT,
+                shape=PolylineShape(points=[(0, 0), (20, 0)]),
                 thread={"chart": "madeira_polyneon_40", "code": "1800", "rgb": "#1a1a1a"},
             )
         ],
@@ -130,7 +131,7 @@ def test_calibrate_lists_what_is_ready_and_what_is_waiting(capsys):
     assert main(["calibrate", "--list"]) == EXIT_OK
     out = capsys.readouterr().out
     assert "dimension_grid" in out and "ready" in out
-    assert "column_ladder" in out and "needs M1" in out
+    assert "text_ladder" in out and "needs M6" in out
 
 
 def test_calibrate_writes_files_to_sew_and_a_sheet_to_measure_on(tmp_path, capsys):
@@ -158,6 +159,7 @@ def test_calibrate_writes_files_to_sew_and_a_sheet_to_measure_on(tmp_path, capsy
 
 
 def test_calibrate_skips_a_pattern_that_needs_generators_we_lack(tmp_path, capsys):
+    """Only text is left, and it needs licensed embroidery fonts (M6)."""
     code = main(
         [
             "calibrate",
@@ -166,11 +168,11 @@ def test_calibrate_skips_a_pattern_that_needs_generators_we_lack(tmp_path, capsy
             "--out",
             str(tmp_path),
             "--patterns",
-            "density_wedge",
+            "text_ladder",
         ]
     )
     assert code == EXIT_OK
-    assert "needs generators that land in M1" in capsys.readouterr().err
+    assert "needs generators that land in M6" in capsys.readouterr().err
 
 
 def test_cap_calibration_fits_the_cap_field(tmp_path, capsys):

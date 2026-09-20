@@ -46,10 +46,14 @@ _COMMAND = {
 def split_long_moves(stitches: list[PlanStitch], max_move_mm: float) -> list[PlanStitch]:
     """Break moves longer than the format allows into legal steps.
 
-    A DST jump cannot exceed 12.1 mm, so a 40 mm travel is four jumps. We split
-    here rather than leaving it to the writer library: the split points end up
-    in the file, in the checks, and in the simulator, so all three agree on
-    what the machine will do.
+    The limit is per axis, because that is how these formats encode a move:
+    one delta per axis, each of which has to fit its field. A 40 mm travel in
+    x is four jumps; a diagonal move of 12 mm in x and 12 mm in y is one, even
+    though it is 17 mm long.
+
+    We split here rather than leaving it to the writer library, so the split
+    points end up in the file, in the checks and in the simulator, and all
+    three agree on what the machine will do.
     """
     if max_move_mm <= 0:
         raise ValueError("max_move_mm must be positive")
@@ -58,7 +62,9 @@ def split_long_moves(stitches: list[PlanStitch], max_move_mm: float) -> list[Pla
     previous: PlanStitch | None = None
     for stitch in stitches:
         if previous is not None and stitch.cmd in (Cmd.STITCH, Cmd.JUMP):
-            span = math.hypot(stitch.x_mm - previous.x_mm, stitch.y_mm - previous.y_mm)
+            span = max(
+                abs(stitch.x_mm - previous.x_mm), abs(stitch.y_mm - previous.y_mm)
+            )
             if span > max_move_mm:
                 steps = math.ceil(round(span / max_move_mm, 9))
                 for step in range(1, steps):

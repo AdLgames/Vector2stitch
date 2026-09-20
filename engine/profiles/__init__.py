@@ -2,6 +2,7 @@
 
 from engine.profiles.loader import (
     FabricProfile,
+    Fill,
     Machine,
     ProfileNotFound,
     Satin,
@@ -13,6 +14,7 @@ from engine.profiles.loader import (
 
 __all__ = [
     "FabricProfile",
+    "Fill",
     "Machine",
     "Satin",
     "ProfileNotFound",
