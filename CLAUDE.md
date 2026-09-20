@@ -23,6 +23,10 @@ before changing engine behaviour. Current milestone status:
    cannot do well raises and names the milestone that will cover it. A
    confident bad file is the worst outcome this product can produce.
 7. **Every delivered file records engine, profile and schema version.**
+8. **Machine profiles never change a stitch.** Hardware differences are
+   refused or warned about, never silently digitized around -- otherwise the
+   same design on two machines is two designs. Machine data may set speed and
+   tension on the worksheet, and may block a file outright.
 
 ## Before you push
 

@@ -19,7 +19,8 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | IR schema v1 (Pydantic, versioned, deterministic JSON) | `engine/ir/` | Done |
 | Schema migration chain | `engine/ir/migrate.py` | Done (empty at 1.0, by design) |
 | Fabric profiles: twill, pique, cap | `engine/profiles/` | Loadable, versioned on disk; **none calibrated** |
-| Machine setup per profile (thread, needle, speed, tension) | `engine/profiles/data/` | Done |
+| Machine setup per fabric profile (thread, needle, speed, tension) | `engine/profiles/data/` | Done |
+| Machine profiles: the shop's own hardware, designer-edited | `engine/machines/` | Done; templates only, none calibrated |
 | Parameter resolution with provenance | `engine/stitchgen/params.py` | Done |
 | Run stitch generation, ties, short-stitch filter, bean | `engine/stitchgen/run.py` | Done |
 | Plan assembly: travel, trims, colour changes | `engine/stitchgen/__init__.py` | Done |
@@ -33,7 +34,7 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Determinism tests + committed fingerprints | `tests/test_determinism.py` | Done |
 | CI: lint, tests on 3.11/3.12, determinism on two OS images | `.github/workflows/ci.yml` | Done |
 
-143 tests pass; `ruff check` is clean.
+171 tests pass; `ruff check` is clean.
 
 ## Try it
 
@@ -60,6 +61,20 @@ writes the operator worksheet beside them.
   but a run stitch has no width to compensate. It first bites at M1, on satin.
 - **No curve shortening.** A run through a tight corner keeps its target
   length and will visibly cut the corner. M1.
+
+## Machine profiles
+
+The generic values above are a starting point; the hardware in a given room is
+not generic. `engine/machines/` holds designer-owned machine profiles -- speed
+the machine actually holds, sew field, cap driver, auto trimmer, readable
+formats, and locally gauged tension -- resolved against the fabric profile to
+produce the setup on the worksheet. Two templates ship, both uncalibrated;
+`docs/machines.md` covers describing your own.
+
+A machine profile can refuse a file (cap placement with no cap driver, design
+larger than the field) and can change the speed and tension on the sheet. It
+can never change a stitch coordinate: the same design on two machines has to
+stay the same design.
 
 ## Reconciled against commercial machine standards
 

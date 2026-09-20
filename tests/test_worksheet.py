@@ -2,29 +2,50 @@
 
 from __future__ import annotations
 
-from engine.cli.worksheet import estimate_runtime_minutes, top_tension_gf, worksheet
+from engine.cli.worksheet import estimate_runtime_minutes, worksheet
+from engine.machines import load_machine, resolve_setup
 from engine.profiles.loader import load_profile
 from engine.stitchgen import generate
 
 
-def test_top_tension_is_derived_from_the_bobbin_baseline():
+def test_top_tension_is_derived_from_the_bobbin_baseline(single_run_design):
     """Set by ratio off a gauge reading, not by feel."""
     profile = load_profile("twill@1")
-    expected = 20 * profile.machine.top_to_bobbin_tension_ratio
-    assert top_tension_gf(profile) == expected
+    setup = resolve_setup(profile, single_run_design)
+    assert setup.top_gf == 20 * profile.machine.top_to_bobbin_tension_ratio
 
 
-def test_runtime_estimate_uses_the_profile_speed(single_run_design):
-    profile = load_profile("cap@1")
+def test_runtime_estimate_uses_the_speed_the_machine_will_hold(single_run_design):
+    profile = load_profile("twill@1")
     plan = generate(single_run_design, profile)
-    assert estimate_runtime_minutes(plan, profile) == plan.stitch_count() / profile.machine.max_spm
+    setup = resolve_setup(profile, single_run_design, plan, load_machine("single_head@1"))
+    assert estimate_runtime_minutes(plan, setup) == plan.stitch_count() / setup.max_spm
+    assert setup.max_spm == 800  # the machine's ceiling, below the fabric's 1000
 
 
-def test_a_cap_estimate_is_slower_than_the_same_design_on_twill(single_run_design):
-    twill, cap = load_profile("twill@1"), load_profile("cap@1")
-    on_twill = generate(single_run_design, twill)
-    on_cap = generate(single_run_design, cap)
-    assert estimate_runtime_minutes(on_cap, cap) > estimate_runtime_minutes(on_twill, twill)
+def test_a_slower_machine_makes_the_same_design_take_longer(single_run_design):
+    profile = load_profile("twill@1")
+    plan = generate(single_run_design, profile)
+    fast = resolve_setup(profile, single_run_design, plan, load_machine("multineedle_6head@1"))
+    slow = resolve_setup(profile, single_run_design, plan, load_machine("single_head@1"))
+    assert estimate_runtime_minutes(plan, slow) > estimate_runtime_minutes(plan, fast)
+
+
+def test_worksheet_names_the_machine_and_where_the_numbers_came_from(single_run_design):
+    profile = load_profile("twill@1")
+    plan = generate(single_run_design, profile)
+    setup = resolve_setup(profile, single_run_design, plan, load_machine("single_head@1"))
+    sheet = worksheet(single_run_design, plan, profile, setup)
+    assert "single_head@1" in sheet
+    assert "from the machine profile" in sheet
+    assert "Sew field" in sheet
+
+
+def test_worksheet_without_a_machine_says_the_numbers_are_generic(single_run_design):
+    profile = load_profile("twill@1")
+    sheet = worksheet(single_run_design, generate(single_run_design, profile), profile)
+    assert "not specified" in sheet
+    assert "No machine profile" in sheet
 
 
 def test_worksheet_warns_while_the_profile_is_uncalibrated(single_run_design):

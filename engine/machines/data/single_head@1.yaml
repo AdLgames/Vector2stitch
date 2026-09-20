@@ -1,0 +1,27 @@
+# TEMPLATE -- a generic single-head machine, flat goods only.
+#
+# Copy and edit for your own machine; see multineedle_6head@1.yaml for how.
+name: single_head
+version: 1
+description: Generic single-head machine. Flat goods only, no cap driver.
+vendor: ""
+model: ""
+calibrated: false
+
+heads: 1
+needles_per_head: 6
+
+speed:
+  max_spm_flat: 800
+  # No cap driver, so this is never reached -- a cap placement is refused
+  # outright rather than sewn slowly and badly.
+  max_spm_cap: 400
+
+fields:
+  flat_width_mm: 200.0
+  flat_height_mm: 300.0
+
+capabilities:
+  auto_trim: false
+  cap_driver: false
+  formats: [pes, jef, dst]

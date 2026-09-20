@@ -1,0 +1,51 @@
+# TEMPLATE -- a generic commercial 6-head multi-needle with a cap driver.
+#
+# This file is a starting point, not a description of your machine. Two
+# machines of the same model, on the same floor, hold different speeds and
+# gauge different tensions. Copy it, edit it, and point V2S_MACHINE_DIR at
+# your own directory:
+#
+#     mkdir -p ~/shop/machines
+#     cp .../multineedle_6head@1.yaml ~/shop/machines/barudan_left@1.yaml
+#     $EDITOR ~/shop/machines/barudan_left@1.yaml   # set name: barudan_left
+#     export V2S_MACHINE_DIR=~/shop/machines
+#
+# A file of your own shadows a shipped one of the same name completely.
+name: multineedle_6head
+version: 1
+description: Generic commercial 6-head multi-needle, cap driver fitted.
+vendor: ""
+model: ""
+
+# Set true once every number below was measured on this machine rather than
+# read off a spec sheet. The worksheet prints which it is.
+calibrated: false
+
+heads: 6
+needles_per_head: 15
+
+speed:
+  # The speed this machine HOLDS without breaking thread, which is not its
+  # nameplate. Running above it buys thread breaks and needle heat, and those
+  # cost more minutes than the speed saves.
+  max_spm_flat: 1000
+  max_spm_cap: 700
+
+fields:
+  # Usable sew field, in mm. Not the hoop -- the machine's reach.
+  flat_width_mm: 360.0
+  flat_height_mm: 500.0
+  cap_width_mm: 360.0
+  cap_height_mm: 70.0
+
+capabilities:
+  auto_trim: true
+  cap_driver: true
+  formats: [dst, pes, jef, exp]
+
+# Delete this block until someone has actually put a gauge on this machine.
+# Absent, the fabric profile's generic range is used and the worksheet says so.
+# tension:
+#   bobbin_gf_min: 18
+#   bobbin_gf_max: 22
+#   top_to_bobbin_ratio: 1.9

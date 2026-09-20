@@ -148,4 +148,61 @@ def test_worksheet_carries_the_machine_setup(tmp_path):
     assert "MACHINE SETUP" in sheet
     assert "40 wt polyester" in sheet
     assert "75/11" in sheet
-    assert "gf (gauge measured)" in sheet
+    assert "Bobbin tension" in sheet and "gf (generic)" in sheet
+
+
+def test_machines_lists_the_templates(capsys):
+    assert main(["machines"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert "multineedle_6head@1" in out
+    assert "single_head@1" in out
+
+
+def test_digitize_against_a_machine_notes_what_the_operator_must_know(tmp_path, capsys):
+    code = main(
+        [
+            "digitize",
+            str(EXAMPLES / "m0_two_color_run.ir.json"),
+            "--out",
+            str(tmp_path),
+            "--formats",
+            "dst",
+            "--machine",
+            "single_head@1",
+        ]
+    )
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert "no auto trimmer" in out
+    assert "single_head@1" in (tmp_path / "m0_two_color_run.worksheet.txt").read_text()
+
+
+def test_digitize_writes_nothing_when_the_design_cannot_sew_there(tmp_path, capsys):
+    """A cap on a machine with no cap driver: refused, and no half-delivery
+    left in the output directory for someone to pick up by mistake."""
+    raw = (EXAMPLES / "m0_single_run.ir.json").read_text()
+    raw = raw.replace('"left_chest"', '"cap_front"').replace("twill@1", "cap@1")
+    path = tmp_path / "cap.ir.json"
+    path.write_text(raw)
+
+    code = main(
+        ["digitize", str(path), "--out", str(tmp_path / "out"), "--machine", "single_head@1"]
+    )
+    assert code == EXIT_ERROR
+    assert "cap driver" in capsys.readouterr().err
+    assert not list((tmp_path / "out").glob("*.dst")) if (tmp_path / "out").exists() else True
+
+
+def test_an_unknown_machine_is_an_error_not_a_silent_default(tmp_path, capsys):
+    code = main(
+        [
+            "digitize",
+            str(EXAMPLES / "m0_single_run.ir.json"),
+            "--out",
+            str(tmp_path),
+            "--machine",
+            "not_a_machine",
+        ]
+    )
+    assert code == EXIT_ERROR
+    assert "no machine profile" in capsys.readouterr().err

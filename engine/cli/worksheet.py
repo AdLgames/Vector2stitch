@@ -8,32 +8,34 @@ ruined garment. Plain text in M0; the PDF/HTML version ships with delivery (M7).
 from __future__ import annotations
 
 from engine.ir.schema import IRDocument
+from engine.machines.setup import MachineSetup, resolve_setup
 from engine.plan import Cmd, StitchPlan
 from engine.profiles.loader import FabricProfile
 
 
-def estimate_runtime_minutes(plan: StitchPlan, profile: FabricProfile) -> float:
-    """Rough machine time at the profile's recommended speed.
+def estimate_runtime_minutes(plan: StitchPlan, setup: MachineSetup) -> float:
+    """Rough machine time at the speed this machine will actually hold.
 
     Needle time only. Trims, colour changes, hooping and operator handling are
     what actually separate this number from a shop's real throughput, so treat
     it as a floor, not a quote.
     """
-    return plan.stitch_count() / profile.machine.max_spm
+    return plan.stitch_count() / setup.max_spm
 
 
-def top_tension_gf(profile: FabricProfile) -> float:
-    """Top tension target, derived from the gauge-measured bobbin baseline.
+def worksheet(
+    doc: IRDocument,
+    plan: StitchPlan,
+    profile: FabricProfile,
+    setup: MachineSetup | None = None,
+) -> str:
+    """Render the operator sheet for one design.
 
-    Setting top tension by feel is how two operators produce two different
-    results from the same file. The ratio comes from the profile.
+    Without a machine profile the sheet still prints, using the fabric
+    profile's generic numbers and saying so -- a shop that has not described
+    its hardware yet still gets a usable sheet.
     """
-    baseline = (profile.machine.bobbin_tension_gf_min + profile.machine.bobbin_tension_gf_max) / 2
-    return baseline * profile.machine.top_to_bobbin_tension_ratio
-
-
-def worksheet(doc: IRDocument, plan: StitchPlan, profile: FabricProfile) -> str:
-    """Render the operator sheet for one design."""
+    setup = setup or resolve_setup(profile, doc, plan)
     min_x, min_y, max_x, max_y = plan.extents_mm()
     trims = sum(1 for s in plan.stitches if s.cmd is Cmd.TRIM)
     jumps = sum(1 for s in plan.stitches if s.cmd is Cmd.JUMP)
@@ -47,22 +49,30 @@ def worksheet(doc: IRDocument, plan: StitchPlan, profile: FabricProfile) -> str:
         f"Fabric profile   : {profile.ref}  ({profile.description})",
         f"Stabilizer       : {profile.materials.stabilizer}",
         f"Topping          : {'yes' if profile.materials.topping else 'no'}",
+        *(
+            [
+                f"Sew field        : {setup.field_width_mm:.0f} x "
+                f"{setup.field_height_mm:.0f} mm"
+            ]
+            if setup.field_width_mm and setup.field_height_mm
+            else []
+        ),
         "",
         f"Stitches         : {plan.stitch_count()}",
         f"Colour changes   : {max(len(plan.threads) - 1, 0)}",
         f"Trims / jumps    : {trims} / {jumps}",
-        f"Est. run time    : {estimate_runtime_minutes(plan, profile):.1f} min at "
-        f"{profile.machine.max_spm} spm, needle time only",
+        f"Est. run time    : {estimate_runtime_minutes(plan, setup):.1f} min at "
+        f"{setup.max_spm} spm, needle time only",
         "",
         "MACHINE SETUP",
         "-" * 60,
+        f"Machine          : {setup.machine_ref or 'not specified'}",
         f"Thread           : {profile.machine.thread_weight_wt} wt {profile.machine.thread_type}",
         f"Needle           : {profile.machine.needle_size}",
-        f"Max speed        : {profile.machine.max_spm} spm",
-        f"Bobbin tension   : {profile.machine.bobbin_tension_gf_min:.0f}"
-        f"-{profile.machine.bobbin_tension_gf_max:.0f} gf (gauge measured)",
-        f"Top tension      : ~{top_tension_gf(profile):.0f} gf "
-        f"({profile.machine.top_to_bobbin_tension_ratio:g}x the bobbin baseline)",
+        f"Max speed        : {setup.max_spm} spm (from the {setup.speed_source} profile)",
+        f"Bobbin tension   : {setup.bobbin_gf_min:.0f}-{setup.bobbin_gf_max:.0f} gf "
+        f"({'gauged on this machine' if setup.tension_source == 'machine' else 'generic'})",
+        f"Top tension      : ~{setup.top_gf:.0f} gf",
         "",
         "COLOUR SEQUENCE",
         "-" * 60,
@@ -87,5 +97,14 @@ def worksheet(doc: IRDocument, plan: StitchPlan, profile: FabricProfile) -> str:
             "!! machines. Test sew on scrap before any production run.",
             "",
         ]
+    if setup.blockers:
+        lines += ["!! WILL NOT SEW ON THIS MACHINE", "-" * 60]
+        lines += [f"!! {blocker}" for blocker in setup.blockers]
+        lines.append("")
+    if setup.warnings:
+        lines += ["NOTES", "-" * 60]
+        lines += [f"- {warning}" for warning in setup.warnings]
+        lines.append("")
+
     lines += ["Test sew on scrap before any production run.", ""]
     return "\n".join(lines)

@@ -10,6 +10,7 @@ embroidery objects → machine files (DST, PES, JEF, EXP) for commercial decorat
 | [`docs/embroidery-digitizing-quality.md`](docs/embroidery-digitizing-quality.md) | What "good" means: defect taxonomy, per-layer quality rules, fabric profiles, verification, metrics, and the commercial/operational choices that protect them |
 | [`docs/embroidery-digitizing-build-plan.md`](docs/embroidery-digitizing-build-plan.md) | What to build, in what order, and the acceptance criteria for each milestone |
 | [`docs/machine-standards.md`](docs/machine-standards.md) | Commercial machine-side standards, and where the engine's values agree, differ, or are still guesses |
+| [`docs/machines.md`](docs/machines.md) | Describing your own machines, so speed, tension and sew field match the hardware in your room |
 | [`docs/m0-status.md`](docs/m0-status.md) | Where the code is against those criteria right now |
 
 Read the quality doc first; the build plan is its companion and defers all
@@ -20,7 +21,9 @@ numeric defaults to it and to the fabric profile files.
 ```sh
 pip install -e ".[dev]"
 v2s profiles                                              # what fabrics are supported
+v2s machines                                              # machine profiles on the search path
 v2s digitize examples/m0_single_run.ir.json --out out     # IR -> DST, PES, worksheet
+v2s digitize logo.ir.json --out out --machine your_machine   # against your own hardware
 v2s render out/m0_single_run.dst                          # SVG of the written file
 ```
 
