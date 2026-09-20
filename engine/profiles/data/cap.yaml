@@ -1,0 +1,49 @@
+# Structured cap front. Curved, unforgiving, and sewn on a driver rather than
+# a flat hoop: sequencing is center-out and bottom-up, not a preference.
+#
+# Starting defaults, not calibrated values -- see twill.yaml and the quality doc.
+name: cap
+version: 1
+description: Structured cap front. Center-out sequencing; limited sew field height.
+calibrated: false
+
+classification:
+  run_max_width_mm: 1.0
+  satin_max_width_mm: 6.0    # tighter than flat goods; wide fills distort on the curve
+  min_text_height_mm: 5.0
+
+stitch:
+  run_length_mm: 2.0
+  fill_length_mm: 3.2
+  min_length_mm: 0.5
+  max_length_mm: 12.0
+  bean_repeats: 1
+  tie_length_mm: 0.8        # tie-in / tie-off stitch length
+  tie_stitches: 3           # penetrations per tie, on every object start and before every trim
+
+density:
+  fill_row_spacing_mm: 0.40
+  satin_spacing_mm: 0.38     # denser than flat goods: buckram is stiff, the column needs holding
+  overlap_scale: 0.85
+
+compensation:
+  pull_comp_mm_per_side: 0.30
+  push_comp_mm: 0.20
+
+underlay:
+  satin_narrow: [center_run]
+  satin_medium: [edge_run, zigzag]
+  satin_wide: [edge_run, zigzag]
+  fill: [edge_run, tatami_low]
+  satin_narrow_max_width_mm: 2.0
+  satin_medium_max_width_mm: 4.0
+  inset_mm: 0.3
+
+routing:
+  trim_threshold_mm: 6.0
+  overlap_margin_mm: 0.3
+  sequencing: center_out
+
+materials:
+  stabilizer: "none (buckram)"
+  topping: false

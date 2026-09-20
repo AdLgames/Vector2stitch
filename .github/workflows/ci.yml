@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+env:
+  # Pinned so IR documents, stitch plans and file fingerprints are reproducible.
+  V2S_ENGINE_VERSION: ci
+
+jobs:
+  checks:
+    name: lint + tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -q
+
+  determinism:
+    # The same design must produce byte-identical files on any host. Running
+    # this on a second OS is what actually proves it -- see the committed
+    # fingerprints in tests/fingerprints.json.
+    name: determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/test_determinism.py -q
+
+  # The golden suite job lands with M2: real designs with approved output,
+  # structural diff on the IR and metric diff on the stitches, blocking merges
+  # to /engine. Until it exists, the fingerprints above are the only regression
+  # net, and they cover two hand-authored designs, not real customer artwork.
