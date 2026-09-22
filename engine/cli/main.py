@@ -11,6 +11,7 @@ import json
 import sys
 from pathlib import Path
 
+from engine.checks import run_checks
 from engine.cli.worksheet import worksheet
 from engine.export import verify, write
 from engine.ir.schema import load_ir, save_ir
@@ -32,6 +33,9 @@ EXIT_ERROR = 1
 EXIT_NOT_YET_BUILT = 3
 """A command that exists in the plan but not yet in the code. Distinct from a
 real failure so scripts and CI can tell "broken" from "not built yet"."""
+EXIT_BLOCKED = 5
+"""The checks refused the file. Not a tool failure -- a verdict, and the one
+that means this must not go on a machine."""
 
 DEFAULT_FORMATS = ["dst", "pes"]
 
@@ -74,6 +78,16 @@ def _cmd_digitize(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_ERROR
+
+    report = run_checks(doc, plan, profile, setup)
+    print(report.format())
+    if not report.ok:
+        print(
+            "error: the checks refused this file; nothing written. "
+            "Fix the objects or the profile -- not the stitches.",
+            file=sys.stderr,
+        )
+        return EXIT_BLOCKED
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -183,12 +197,32 @@ def _cmd_machines(args: argparse.Namespace) -> int:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
-    print(
-        "check: the validators land in M2 (quality doc section 6.1). "
-        "Until then every file goes through human review, without exception.",
-        file=sys.stderr,
-    )
-    return EXIT_NOT_YET_BUILT
+    """Run the checks on a design without writing anything."""
+    doc = load_ir(args.file)
+    try:
+        profile, overrides = effective_profile(doc.design.fabric_profile, args.profile_dir)
+    except (ProfileNotFound, OverrideError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    machine = None
+    if args.machine:
+        try:
+            machine = load_machine(args.machine, args.machine_dir)
+        except MachineNotFound as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+
+    try:
+        plan = generate(doc, profile, [applied.path for applied in overrides])
+    except (UnsupportedObject, UnsupportedProfile) as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return EXIT_NOT_YET_BUILT
+
+    setup = resolve_setup(profile, doc, plan, machine)
+    report = run_checks(doc, plan, profile, setup)
+    print(report.format(show_passes=args.verbose))
+    return EXIT_OK if report.ok else EXIT_BLOCKED
 
 
 def _cmd_calibrate(args: argparse.Namespace) -> int:
@@ -353,8 +387,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     machines.set_defaults(func=_cmd_machines)
 
-    check = sub.add_parser("check", help="run the automated quality checks (M2)")
-    check.add_argument("file", nargs="?", help="path to a machine file or IR document")
+    check = sub.add_parser("check", help="run the automated quality checks on a design")
+    check.add_argument("file", help="path to an IR document")
+    check.add_argument("--machine", default=None, help="machine profile reference")
+    check.add_argument("--machine-dir", default=None, help="your machine profile directory")
+    check.add_argument(
+        "--profile-dir", default=None, help="your shop's profile override directory"
+    )
+    check.add_argument(
+        "-v", "--verbose", action="store_true", help="also show the rules that passed"
+    )
     check.set_defaults(func=_cmd_check)
 
     calibrate = sub.add_parser("calibrate", help="generate lab calibration patterns")

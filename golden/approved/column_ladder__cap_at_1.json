@@ -1,0 +1,25 @@
+{
+  "blocking_findings": [],
+  "color_changes": 0,
+  "height_mm": 54.6,
+  "jumps": 21,
+  "length_histogram": {
+    "0.5": 3,
+    "1.0": 254,
+    "1.5": 208,
+    "2.0": 143,
+    "2.5": 186,
+    "3.5": 504,
+    "4.0": 54,
+    "4.5": 477,
+    "5.5": 27
+  },
+  "profile_ref": "cap@1",
+  "stitch_count": 1878,
+  "threads": 1,
+  "trims": 13,
+  "warning_findings": [
+    "profile_calibrated"
+  ],
+  "width_mm": 30.0
+}

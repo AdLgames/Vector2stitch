@@ -37,9 +37,10 @@ before changing engine behaviour. Current milestone status:
 ```sh
 ruff check .
 pytest -q
+v2s-lab golden        # real designs against approved output
 ```
 
-If `tests/fingerprints.json` fails, engine output moved. That is allowed and
+If the golden suite or `tests/fingerprints.json` fails, engine output moved. That is allowed and
 is how the engine improves -- but never incidentally. Find out what moved,
 regenerate the file deliberately, and say so in the PR. Once the golden suite
 exists (M2) a metric shift also needs digitizer sign-off.

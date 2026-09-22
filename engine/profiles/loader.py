@@ -69,6 +69,20 @@ class Fill(BaseModel):
     stagger_steps: int = Field(ge=1)
     min_span_mm: float = Field(gt=0)
     hole_clearance_mm: float = Field(ge=0)
+    min_turn_fraction: float = Field(gt=0, le=1)
+
+
+class Checks(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    max_penetrations_per_mm2: float = Field(gt=0)
+    penetration_bin_mm: float = Field(gt=0)
+    trim_budget_per_1000: float = Field(ge=0)
+    jump_budget_per_1000: float = Field(ge=0)
+    color_change_budget: int = Field(ge=0)
+    budget_min_stitches: int = Field(ge=0)
+    """Below this, per-thousand ratios say more about the design's size than
+    about its quality, so the budgets are not judged."""
 
 
 class Compensation(BaseModel):
@@ -165,6 +179,7 @@ class FabricProfile(BaseModel):
     density: Density
     satin: Satin
     fill: Fill
+    checks: Checks
     compensation: Compensation
     underlay: Underlay
     routing: Routing

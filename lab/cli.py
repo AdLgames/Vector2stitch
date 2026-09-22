@@ -15,6 +15,7 @@ from datetime import date
 
 from engine.lab.targets import MeasurementTarget
 from lab.defects import USUAL_CAUSE, Defect
+from lab.golden import run as golden_run
 from lab.sewout import Consumables, SewOut, append, evaluate, load_targets, read_log
 
 EXIT_OK = 0
@@ -131,6 +132,28 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_golden(args: argparse.Namespace) -> int:
+    """Regenerate every golden design and compare it against approval."""
+    results = golden_run(args.designs, args.approved, approve=args.approve)
+    if not results:
+        print("no golden designs found", file=sys.stderr)
+        return EXIT_ERROR
+
+    if args.approve:
+        print(f"approved {len(results)} design(s)")
+        print("Say in the PR what moved and why -- an approval nobody explained")
+        print("is how a regression net becomes a rubber stamp.")
+        return EXIT_OK
+
+    failed = [result for result in results if not result.ok]
+    for result in failed:
+        print(f"{result.design} ({result.profile_ref}):")
+        for difference in result.differences:
+            print(f"  {difference}")
+    print(f"{len(results) - len(failed)}/{len(results)} designs match approval")
+    return EXIT_OK if not failed else EXIT_OUT_OF_TOLERANCE
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2s-lab", description="Record and read sew-out results."
@@ -168,6 +191,16 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--photo", default=None)
     record.add_argument("--notes", default="")
     record.set_defaults(func=_cmd_record)
+
+    golden = sub.add_parser("golden", help="run the golden suite")
+    golden.add_argument("--designs", default="golden/designs")
+    golden.add_argument("--approved", default="golden/approved")
+    golden.add_argument(
+        "--approve",
+        action="store_true",
+        help="record current output as approved -- deliberately, and explain it",
+    )
+    golden.set_defaults(func=_cmd_golden)
 
     report = sub.add_parser("report", help="summarise recorded sew-outs")
     report.add_argument("--log", default="lab/sewouts.jsonl")

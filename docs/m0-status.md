@@ -35,13 +35,14 @@ been sewn. Until a file off this engine runs on the lab machines, M0 is open.
 | Basic simulator (SVG from the machine file) | `engine/simulate/` | Done |
 | Production worksheet | `engine/cli/worksheet.py` | Done (text; PDF/HTML at M7) |
 | CLI: `digitize`, `render`, `profiles` | `engine/cli/main.py` | Done |
-| CLI: `check` | `engine/cli/main.py` | Stub, exit 3 |
+| Checks: blocking validators + structured report (M2) | `engine/checks/` | Done |
+| Golden suite: 23 designs, metric comparison, CI job (M2) | `lab/golden.py`, `golden/` | Done |
 | Calibration patterns + measurement sheets | `engine/lab/` | 7 of 8 build; only text pending |
 | Sew-out log, defect taxonomy, `v2s-lab` | `lab/` | Done |
 | Determinism tests + committed fingerprints | `tests/test_determinism.py` | Done |
 | CI: lint, tests on 3.11/3.12, determinism on two OS images | `.github/workflows/ci.yml` | Done |
 
-350 tests pass; `ruff check` is clean.
+410 tests pass; `ruff check` is clean.
 
 ## Try it
 
@@ -68,8 +69,6 @@ writes the operator worksheet beside them.
   on fonts. Everything else in the set builds, so density, column width, pull
   compensation, registration, trim threshold and corner behaviour can all be
   measured now.
-- **No checks.** `v2s check` exits 3. Every file goes through human review
-  until M2, without exception.
 - **No sequencing.** Objects sew in `sequence`, or by z-order then id. Travel
   is an honest jump or trim; hiding travel under later objects is M4.
 - **Compensation now bites.** Every satin column is stitched wider than
@@ -108,14 +107,6 @@ density, underlay and compensation are all sized to what 40 wt covers.
 One conflict is unresolved and cannot be settled by reading: whether our pull
 compensation convention (per side) matches the figures the standard quotes.
 Calipers on the calibration shapes settle it. See §4 of that doc.
-
-## Known, and M2's problem
-
-A fill's turn from one row to the next is about one row spacing long, and
-shorter where the boundary runs diagonally to the rows. Those turns are
-structural -- filtering them deletes one end of every other row -- but they sit
-below the profile's own minimum stitch length. M2's checks have to know the
-difference between a turn and a stub, or they will flag every fill.
 
 ## What M1 has added so far
 

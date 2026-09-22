@@ -207,6 +207,14 @@ def generate(
     threads: list[PlanThread] = []
     current_thread: str | None = None
     last_point: tuple[float, float] | None = None
+    last_tail: tuple[tuple[float, float], tuple[float, float]] | None = None
+    """The last path's final penetration and the one before it -- the anchor
+    and heading a tie-off needs."""
+    tied_off = False
+    """Whether the thread is already tied where it currently sits. An object
+    ends with a tie-off, and the next object's trim must not add a second one
+    on top of it: two ties in one place is a stiff lump and a density
+    hotspot, not twice the security."""
 
     for obj in doc.ordered_objects():
         width_mm = mean_column_width(obj) if obj.kind is ObjectKind.SATIN else None
@@ -238,24 +246,42 @@ def generate(
 
         for path_index, points in enumerate(paths):
             start = points[0]
+            trimmed = False
             if last_point is not None:
                 travel = math.hypot(start[0] - last_point[0], start[1] - last_point[1])
                 if travel > profile.routing.trim_threshold_mm:
+                    needs_tie = not tied_off
+                    # Tie off before the trim, not just at the object's end.
+                    # Thread cut without a tie pulls straight back out, and an
+                    # object with underlay trims several times before it ends.
+                    for point in (
+                        tie_points(
+                            last_tail[0], last_tail[1], params.tie_length_mm, params.tie_stitches
+                        )
+                        if needs_tie
+                        else []
+                    ):
+                        plan.stitches.append(
+                            PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
+                        )
                     plan.stitches.append(
                         PlanStitch(
-                            x_mm=last_point[0], y_mm=last_point[1], cmd=Cmd.TRIM, object_id=obj.id
+                            x_mm=last_tail[0][0],
+                            y_mm=last_tail[0][1],
+                            cmd=Cmd.TRIM,
+                            object_id=obj.id,
                         )
                     )
+                    trimmed = True
                 if travel > 0:
                     plan.stitches.append(
                         PlanStitch(x_mm=start[0], y_mm=start[1], cmd=Cmd.JUMP, object_id=obj.id)
                     )
 
-            # Ties go at the object's start and end, not around every layer:
-            # an underlay layer is covered by what follows it, and tying each
-            # one would leave knots under the top stitches.
             emit = points
-            if path_index == 0:
+            # A tie-in belongs wherever thread starts: at the object's first
+            # path, and again after any trim that cut it.
+            if path_index == 0 or trimmed:
                 tie_in = tie_points(
                     start, points[1], params.tie_length_mm, params.tie_stitches
                 )
@@ -272,6 +298,7 @@ def generate(
                 plan.stitches.append(
                     PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
                 )
+            tied_off = False
 
             if path_index == len(paths) - 1:
                 for point in tie_points(
@@ -281,7 +308,10 @@ def generate(
                         PlanStitch(x_mm=point[0], y_mm=point[1], object_id=obj.id)
                     )
 
+                tied_off = True
+
             last_point = points[-1]
+            last_tail = (points[-1], points[-2])
 
     if last_point is not None:
         plan.stitches.append(PlanStitch(x_mm=last_point[0], y_mm=last_point[1], cmd=Cmd.END))

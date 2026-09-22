@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engine.cli.main import EXIT_ERROR, EXIT_NOT_YET_BUILT, EXIT_OK, main
+from engine.cli.main import (
+    EXIT_BLOCKED,
+    EXIT_ERROR,
+    EXIT_NOT_YET_BUILT,
+    EXIT_OK,
+    main,
+)
 from engine.ir.schema import (
     Design,
     EmbroideryObject,
@@ -121,10 +127,40 @@ def test_profiles_lists_what_v1_supports(capsys):
     assert "twill@1" in out and "pique@1" in out and "cap@1" in out
 
 
-def test_unbuilt_commands_say_so_distinctly(capsys):
+def test_check_passes_a_design_the_engine_is_happy_with(capsys):
+    code = main(["check", str(EXAMPLES / "m0_two_color_run.ir.json")])
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert "0 blocking" in out
+    assert "not calibrated" in out  # the warning every file carries for now
+
+
+def test_check_refuses_a_design_it_cannot_generate(tmp_path, capsys):
     """Exit 3 is "not built yet", not "broken": scripts can tell them apart."""
-    assert main(["check"]) == EXIT_NOT_YET_BUILT
-    assert "M2" in capsys.readouterr().err
+    raw = (EXAMPLES / "m0_single_run.ir.json").read_text().replace('"run"', '"text"')
+    path = tmp_path / "text.ir.json"
+    path.write_text(raw)
+    assert main(["check", str(path)]) == EXIT_NOT_YET_BUILT
+    assert "M6" in capsys.readouterr().err
+
+
+def test_digitize_writes_nothing_when_the_checks_block_it(tmp_path, capsys):
+    """The checks are the last gate before a file reaches a machine, so a
+    blocked file must not leave a half-delivery behind."""
+    from engine.ir.schema import load_ir, save_ir
+
+    doc = load_ir(EXAMPLES / "m0_single_run.ir.json")
+    # A stitch length far over the machine limit: the generator clamps, so the
+    # only way to get there is to ask for a run longer than the format allows.
+    doc.objects[0].params.stitch_length_mm = 40.0
+    doc.objects[0].params.min_stitch_length_mm = 30.0
+    path = save_ir(doc, tmp_path / "bad.ir.json")
+
+    out_dir = tmp_path / "out"
+    code = main(["digitize", str(path), "--out", str(out_dir), "--formats", "dst"])
+    assert code == EXIT_BLOCKED
+    assert not list(out_dir.glob("*.dst")) if out_dir.exists() else True
+    assert "refused this file" in capsys.readouterr().err
 
 
 def test_calibrate_lists_what_is_ready_and_what_is_waiting(capsys):

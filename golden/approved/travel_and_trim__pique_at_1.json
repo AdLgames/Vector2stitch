@@ -1,0 +1,18 @@
+{
+  "blocking_findings": [],
+  "color_changes": 0,
+  "height_mm": 50.0,
+  "jumps": 11,
+  "length_histogram": {
+    "1.0": 84,
+    "2.0": 120
+  },
+  "profile_ref": "pique@1",
+  "stitch_count": 216,
+  "threads": 1,
+  "trims": 8,
+  "warning_findings": [
+    "profile_calibrated"
+  ],
+  "width_mm": 60.0
+}

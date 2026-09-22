@@ -1,0 +1,23 @@
+{
+  "blocking_findings": [],
+  "color_changes": 0,
+  "height_mm": 58.247,
+  "jumps": 24,
+  "length_histogram": {
+    "0.5": 674,
+    "1.0": 462,
+    "1.5": 361,
+    "2.0": 1487,
+    "2.5": 272,
+    "3.0": 86,
+    "3.5": 2215
+  },
+  "profile_ref": "twill@1",
+  "stitch_count": 5582,
+  "threads": 1,
+  "trims": 19,
+  "warning_findings": [
+    "profile_calibrated"
+  ],
+  "width_mm": 149.247
+}

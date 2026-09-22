@@ -53,6 +53,11 @@ fill:
   # genuinely bare; the hairline it leaves is covered by the edge-run underlay
   # and by whatever borders the shape.
   hole_clearance_mm: 0.3
+  # A fill turns at the end of every row, and that turn is one row spacing
+  # long -- shorter where the boundary runs diagonally to the rows. Turns are
+  # structural, so the stitch floor does not apply to them; this is how short
+  # one may get before it counts as a defect rather than a turn.
+  min_turn_fraction: 0.5
 
 compensation:
   pull_comp_mm_per_side: 0.30
@@ -69,6 +74,20 @@ underlay:
   zigzag_spacing_multiplier: 3.0   # underlay zigzag is open; it supports, it does not cover
   tatami_spacing_multiplier: 4.0   # fill underlay is far more open than the layer above it
   tatami_angle_offset_deg: 90.0    # crossing the top layer is what makes it support   # underlay zigzag is open; it supports, it does not cover
+
+checks:
+  # Penetrations in one square millimetre. Our own output peaks around 9 where
+  # ties and corners stack; past this the fabric is being perforated rather
+  # than covered, and thread breaks follow.
+  max_penetrations_per_mm2: 14
+  penetration_bin_mm: 1.0
+  # Trims and jumps are the customer's machine time. These are per thousand
+  # stitches, and are judged only on designs large enough for the ratio to
+  # mean anything.
+  trim_budget_per_1000: 25
+  jump_budget_per_1000: 45
+  color_change_budget: 12
+  budget_min_stitches: 1000
 
 routing:
   trim_threshold_mm: 6.0

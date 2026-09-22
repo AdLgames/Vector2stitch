@@ -44,7 +44,22 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest tests/test_determinism.py -q
 
-  # The golden suite job lands with M2: real designs with approved output,
-  # structural diff on the IR and metric diff on the stitches, blocking merges
-  # to /engine. Until it exists, the fingerprints above are the only regression
-  # net, and they cover two hand-authored designs, not real customer artwork.
+  golden:
+    # Real designs, regenerated end to end and compared against output that was
+    # approved deliberately. A difference here is not automatically wrong -- it
+    # may be an improvement -- but changing engine output without saying so is.
+    name: golden suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: v2s-lab golden
+      - run: pytest tests/test_golden.py tests/test_checks.py -q
+
+  # The suite is seeded with the calibration patterns on every shipped profile,
+  # plus the hand-authored examples. Real customer artwork joins it once ingest
+  # lands (M3), and a metric shift needs a digitizer's sign-off once there is
+  # one to ask.

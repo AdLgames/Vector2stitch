@@ -1,6 +1,7 @@
 """Fabric profiles: no profile, no file."""
 
 from engine.profiles.loader import (
+    Checks,
     FabricProfile,
     Fill,
     Machine,
@@ -13,6 +14,7 @@ from engine.profiles.loader import (
 )
 
 __all__ = [
+    "Checks",
     "FabricProfile",
     "Fill",
     "Machine",

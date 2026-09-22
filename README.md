@@ -12,6 +12,7 @@ embroidery objects → machine files (DST, PES, JEF, EXP) for commercial decorat
 | [`docs/machine-standards.md`](docs/machine-standards.md) | Commercial machine-side standards, and where the engine's values agree, differ, or are still guesses |
 | [`docs/calibration.md`](docs/calibration.md) | The loop that turns inherited defaults into measured ones: generate, sew, measure, record, read, change |
 | [`docs/machines.md`](docs/machines.md) | Describing your own machines, so speed, tension and sew field match the hardware in your room |
+| [`docs/checks.md`](docs/checks.md) | The automated checks, what each one prevents, and the golden suite |
 | [`docs/overrides.md`](docs/overrides.md) | Overriding our fabric defaults with your own floor's numbers, and why the reason matters as much as the value |
 | [`docs/m0-status.md`](docs/m0-status.md) | Where the code is against those criteria right now |
 
@@ -26,6 +27,7 @@ v2s profiles                                              # what fabrics are sup
 v2s machines                                              # machine profiles on the search path
 v2s digitize examples/m0_single_run.ir.json --out out     # IR -> DST, PES, worksheet
 v2s digitize logo.ir.json --out out --machine your_machine   # against your own hardware
+v2s check examples/m0_single_run.ir.json -v               # the blocking checks
 v2s render out/m0_single_run.dst                          # SVG of the written file
 v2s calibrate --profile twill@1 --out out/calibration     # patterns to sew + sheets to measure
 v2s-lab record <targets.json> --measure square_01_x=19.8 ...   # record what came off the machine
