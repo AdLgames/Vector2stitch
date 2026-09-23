@@ -19,6 +19,11 @@ embroidery objects → machine files (DST, PES, JEF, EXP) for commercial decorat
 Read the quality doc first; the build plan is its companion and defers all
 numeric defaults to it and to the fabric profile files.
 
+The garment microfactory middleware (Shopify order → parametric cut file,
+tech pack and machine JSON → factory) is a separate project in its own
+repository, `AdLgames/microfactory-middleware`. It shares no code with this
+engine.
+
 ## Running the engine
 
 ```sh
